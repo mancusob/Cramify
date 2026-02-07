@@ -1,4 +1,8 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 
 const LEVEL_LABELS = {
   0: "Starting from zero",
@@ -15,13 +19,147 @@ function parseTopics(raw) {
     .filter(Boolean);
 }
 
-export default function Roadmap({ searchParams }) {
-  const course = searchParams?.course || "Your course";
-  const level = searchParams?.level || "0";
-  const hoursUntil = searchParams?.hoursUntil || "—";
-  const hoursAvailable = searchParams?.hoursAvailable || "—";
-  const maxSubtopics = searchParams?.maxSubtopics || "—";
-  const topics = parseTopics(searchParams?.topics || "");
+export default function Roadmap() {
+  const searchParams = useSearchParams();
+  const [stored, setStored] = useState(null);
+  const [topicMeta, setTopicMeta] = useState([]);
+  const [aiAllocations, setAiAllocations] = useState(null);
+  const [aiStatus, setAiStatus] = useState("idle");
+  const [aiError, setAiError] = useState("");
+  const [aiClearedNotice, setAiClearedNotice] = useState(false);
+
+  useEffect(() => {
+    const raw = sessionStorage.getItem("cramifyRoadmap");
+    if (raw) {
+      try {
+        setStored(JSON.parse(raw));
+      } catch (error) {
+        setStored(null);
+      }
+    }
+  }, []);
+
+  const data = useMemo(() => {
+    const course = searchParams.get("course") || stored?.course || "Your course";
+    const level = searchParams.get("level") || stored?.level || "0";
+    const hoursUntil =
+      searchParams.get("hoursUntil") || stored?.hoursUntil || "—";
+    const hoursAvailable =
+      searchParams.get("hoursAvailable") || stored?.hoursAvailable || "—";
+    const topics = parseTopics(
+      searchParams.get("topics") || stored?.topics || ""
+    );
+    return { course, level, hoursUntil, hoursAvailable, topics };
+  }, [searchParams, stored]);
+
+  useEffect(() => {
+    setTopicMeta((prev) =>
+      data.topics.map((name) => {
+        const existing = prev.find((topic) => topic.name === name);
+        return (
+          existing || {
+            name,
+            complexity: 3,
+            importance: 3,
+            weighting: 3,
+            progress: 0
+          }
+        );
+      })
+    );
+  }, [data.topics]);
+
+  const hoursAvailableNumber = Number(data.hoursAvailable || 0);
+  const allocations = useMemo(() => {
+    const scores = topicMeta.map(
+      (topic) => topic.complexity * topic.importance * topic.weighting
+    );
+    const totalScore = scores.reduce((sum, score) => sum + score, 0);
+    return topicMeta.map((topic, index) => {
+      const score = scores[index] || 0;
+      const share =
+        totalScore > 0 ? (score / totalScore) * hoursAvailableNumber : 0;
+      return { ...topic, score, hours: share };
+    });
+  }, [topicMeta, hoursAvailableNumber]);
+
+  const getAiHours = (topicName) => {
+    const entry = aiAllocations?.[topicName];
+    if (entry == null) return null;
+    if (typeof entry === "number") return entry;
+    if (typeof entry === "object" && typeof entry.hours === "number") {
+      return entry.hours;
+    }
+    return null;
+  };
+
+  const getAiReason = (topicName) => {
+    const entry = aiAllocations?.[topicName];
+    if (entry && typeof entry === "object" && typeof entry.reason === "string") {
+      return entry.reason;
+    }
+    return "";
+  };
+
+  const updateTopicMeta = (topicName, field, value) => {
+    setTopicMeta((prev) =>
+      prev.map((item) =>
+        item.name === topicName ? { ...item, [field]: value } : item
+      )
+    );
+    if (aiAllocations) {
+      setAiAllocations(null);
+      setAiStatus("idle");
+      setAiError("");
+      setAiClearedNotice(true);
+    }
+  };
+
+  const fetchAiAllocation = async () => {
+    if (!data.topics.length || hoursAvailableNumber <= 0) return;
+    setAiStatus("loading");
+    setAiError("");
+    setAiClearedNotice(false);
+    try {
+      const response = await fetch("/api/allocate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          course: data.course,
+          level: data.level,
+          hoursUntil: data.hoursUntil,
+          hoursAvailable: hoursAvailableNumber,
+          topics: topicMeta.map((topic) => ({
+            name: topic.name
+          }))
+        })
+      });
+
+      if (!response.ok) {
+        const responseClone = response.clone();
+        let errorMessage = "Allocation failed.";
+        try {
+          const errorBody = await response.json();
+          if (errorBody?.error) errorMessage = errorBody.error;
+        } catch {
+          const errorText = await responseClone.text();
+          if (errorText) errorMessage = errorText;
+        }
+        throw new Error(errorMessage);
+      }
+
+      const result = await response.json();
+      setAiAllocations(result.allocations || null);
+      setAiStatus("ready");
+      setAiError("");
+      setAiClearedNotice(false);
+    } catch (error) {
+      setAiAllocations(null);
+      setAiStatus("error");
+      setAiError(error?.message || "Allocation failed.");
+      setAiClearedNotice(false);
+    }
+  };
 
   return (
     <main className="container">
@@ -42,43 +180,156 @@ export default function Roadmap({ searchParams }) {
         <div className="grid">
           <div className="info-card">
             <span className="info-label">Course</span>
-            <strong>{course}</strong>
+            <strong>{data.course}</strong>
           </div>
           <div className="info-card">
             <span className="info-label">Knowledge level</span>
-            <strong>{LEVEL_LABELS[level] || LEVEL_LABELS[0]}</strong>
+            <strong>{LEVEL_LABELS[data.level] || LEVEL_LABELS[0]}</strong>
           </div>
           <div className="info-card">
             <span className="info-label">Hours until exam</span>
-            <strong>{hoursUntil}</strong>
+            <strong>{data.hoursUntil}</strong>
           </div>
           <div className="info-card">
             <span className="info-label">Hours available</span>
-            <strong>{hoursAvailable}</strong>
-          </div>
-          <div className="info-card">
-            <span className="info-label">Max subtopics</span>
-            <strong>{maxSubtopics}</strong>
+            <strong>{data.hoursAvailable}</strong>
           </div>
         </div>
       </section>
 
       <section className="panel">
         <h2>Topic Roadmap</h2>
-        {topics.length === 0 ? (
+        <p className="muted">
+          Allocation prioritizes high-impact topics using complexity, importance
+          for other topics, and exam weighting.
+        </p>
+        <div className="row">
+          <button
+            type="button"
+            className="primary"
+            onClick={fetchAiAllocation}
+            disabled={aiStatus === "loading"}
+          >
+            {aiStatus === "loading" ? "Calculating..." : "AI recommend time"}
+          </button>
+          {aiStatus === "error" && (
+            <span className="muted">
+              AI unavailable.
+              {aiError ? ` ${aiError}` : " Using local estimates."}
+            </span>
+          )}
+          {aiClearedNotice && (
+            <span className="muted">AI recommendation cleared due to edits.</span>
+          )}
+          {aiStatus === "ready" && (
+            <span className="muted">AI recommendations loaded.</span>
+          )}
+        </div>
+        {data.topics.length === 0 ? (
           <p className="muted">
             No topics provided yet. Go back and add your topics to see a
             roadmap.
           </p>
         ) : (
           <div className="roadmap-grid">
-            {topics.map((topic, index) => (
-              <div key={`${topic}-${index}`} className="plan-card">
-                <span className="tag">Topic {index + 1}</span>
-                <h3>{topic}</h3>
-                <p className="muted">
-                  Focus block with checkpoints and quick practice.
-                </p>
+            {allocations.map((topic, index) => (
+              <div key={`${topic.name}-${index}`} className="plan-card">
+                <div className="topic-header">
+                  <div>
+                    <span className="tag">Topic {index + 1}</span>
+                    <h3>{topic.name}</h3>
+                  </div>
+                  <div className="topic-hours">
+                    <span className="info-label">Estimated time</span>
+                    <strong>
+                      {getAiHours(topic.name) != null
+                        ? `${getAiHours(topic.name).toFixed(1)}h`
+                        : hoursAvailableNumber > 0
+                          ? `${Math.max(topic.hours, 0.5).toFixed(1)}h`
+                          : "—"}
+                    </strong>
+                    {getAiReason(topic.name) && (
+                      <p className="ai-reason">{getAiReason(topic.name)}</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="progress">
+                  <div className="progress-bar">
+                    <div
+                      className="progress-fill"
+                      style={{ width: `${topic.progress}%` }}
+                    />
+                  </div>
+                  <span className="muted">{topic.progress}% complete</span>
+                </div>
+
+                <div className="slider-grid">
+                  <label className="field compact">
+                    <span>Complexity</span>
+                    <input
+                      type="range"
+                      min="1"
+                      max="5"
+                      value={topic.complexity}
+                      onChange={(event) =>
+                        updateTopicMeta(
+                          topic.name,
+                          "complexity",
+                          Number(event.target.value)
+                        )
+                      }
+                    />
+                  </label>
+                  <label className="field compact">
+                    <span>Importance</span>
+                    <input
+                      type="range"
+                      min="1"
+                      max="5"
+                      value={topic.importance}
+                      onChange={(event) =>
+                        updateTopicMeta(
+                          topic.name,
+                          "importance",
+                          Number(event.target.value)
+                        )
+                      }
+                    />
+                  </label>
+                  <label className="field compact">
+                    <span>Exam weight</span>
+                    <input
+                      type="range"
+                      min="1"
+                      max="5"
+                      value={topic.weighting}
+                      onChange={(event) =>
+                        updateTopicMeta(
+                          topic.name,
+                          "weighting",
+                          Number(event.target.value)
+                        )
+                      }
+                    />
+                  </label>
+                  <label className="field compact">
+                    <span>Progress</span>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={topic.progress}
+                      onChange={(event) =>
+                        updateTopicMeta(
+                          topic.name,
+                          "progress",
+                          Number(event.target.value)
+                        )
+                      }
+                    />
+                  </label>
+                </div>
               </div>
             ))}
           </div>

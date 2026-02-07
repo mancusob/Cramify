@@ -9,17 +9,33 @@ export default function Home() {
   const [knowledgeLevel, setKnowledgeLevel] = useState("0");
   const [hoursUntilExam, setHoursUntilExam] = useState("");
   const [hoursAvailable, setHoursAvailable] = useState("");
-  const [maxSubtopics, setMaxSubtopics] = useState("6");
-  const [topics, setTopics] = useState("");
+  const [topics, setTopics] = useState([]);
+  const [topicInput, setTopicInput] = useState("");
   const router = useRouter();
 
   const hoursUntilNumber = Number(hoursUntilExam || 0);
   const sleepHours = Math.ceil(hoursUntilNumber / 24) * 8;
-  const bufferHours = 2;
+  const personalHours = Math.ceil(hoursUntilNumber / 24) * 1;
+  const bufferHours = 1;
   const recommendedStudyHours = Math.max(
-    hoursUntilNumber - sleepHours - bufferHours,
+    hoursUntilNumber - sleepHours - personalHours - bufferHours,
     1
   );
+
+  const addTopic = () => {
+    const trimmed = topicInput.trim();
+    if (!trimmed) return;
+    if (topics.includes(trimmed)) {
+      setTopicInput("");
+      return;
+    }
+    setTopics((prev) => [...prev, trimmed]);
+    setTopicInput("");
+  };
+
+  const removeTopic = (topicToRemove) => {
+    setTopics((prev) => prev.filter((topic) => topic !== topicToRemove));
+  };
 
   return (
     <main className="container">
@@ -138,7 +154,8 @@ export default function Home() {
               <p className="muted">
                 Recommended study time: about{" "}
                 <strong>{recommendedStudyHours} hours</strong> so you can still
-                sleep ~{sleepHours} hours and keep a small buffer.
+                sleep ~{sleepHours} hours, take ~{personalHours} hours for meals,
+                and keep a small buffer.
               </p>
             ) : (
               <p className="muted">
@@ -152,43 +169,77 @@ export default function Home() {
               What’s the max number of subtopics you want to cover? List the
               topics you need to study.
             </p>
-            <div className="grid">
-              <label className="field">
-                <span>Max subtopics to cover</span>
-                <input
-                  type="number"
-                  min="1"
-                  max="12"
-                  value={maxSubtopics}
-                  onChange={(event) => setMaxSubtopics(event.target.value)}
-                />
-              </label>
-            </div>
             <label className="field">
-              <span>Topics to cover</span>
-              <textarea
-                rows="6"
-                placeholder="e.g. KCL/KVL, Thevenin/Norton, RC transients, AC steady-state..."
-                value={topics}
-                onChange={(event) => setTopics(event.target.value)}
-              />
+              <span>Add topics one by one</span>
+              <div className="row">
+                <input
+                  type="text"
+                  placeholder="e.g. KCL/KVL"
+                  value={topicInput}
+                  onChange={(event) => setTopicInput(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      addTopic();
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  className="ghost"
+                  onClick={addTopic}
+                >
+                  Add
+                </button>
+              </div>
             </label>
+            <div className="topic-list">
+              {topics.length === 0 ? (
+                <p className="muted">No topics added yet.</p>
+              ) : (
+                topics.map((topic) => (
+                  <div key={topic} className="topic-item">
+                    <span>{topic}</span>
+                    <button
+                      type="button"
+                      className="ghost tiny"
+                      onClick={() => removeTopic(topic)}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
             <div className="row">
               <button
                 type="button"
                 className="primary"
                 onClick={() =>
-                  router.push(
-                    `/roadmap?course=${encodeURIComponent(courseName)}&level=${encodeURIComponent(
-                      knowledgeLevel
-                    )}&hoursUntil=${encodeURIComponent(
-                      hoursUntilExam
-                    )}&hoursAvailable=${encodeURIComponent(
-                      hoursAvailable
-                    )}&maxSubtopics=${encodeURIComponent(
-                      maxSubtopics
-                    )}&topics=${encodeURIComponent(topics)}`
-                  )
+                  {
+                    const payload = {
+                      course: courseName,
+                      level: knowledgeLevel,
+                      hoursUntil: hoursUntilExam,
+                      hoursAvailable,
+                      topics
+                    };
+                    sessionStorage.setItem(
+                      "cramifyRoadmap",
+                      JSON.stringify(payload)
+                    );
+                    router.push(
+                      `/roadmap?course=${encodeURIComponent(
+                        courseName
+                      )}&level=${encodeURIComponent(
+                        knowledgeLevel
+                      )}&hoursUntil=${encodeURIComponent(
+                        hoursUntilExam
+                      )}&hoursAvailable=${encodeURIComponent(
+                        hoursAvailable
+                      )}&topics=${encodeURIComponent(topics.join(", "))}`
+                    );
+                  }
                 }
               >
                 Continue

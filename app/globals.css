@@ -194,12 +194,95 @@ textarea {
   color: #8aa0d6;
 }
 
+.topic-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.topic-hours {
+  text-align: right;
+  min-width: 120px;
+}
+
+.ai-reason {
+  margin: 0.35rem 0 0;
+  font-size: 0.85rem;
+  color: #8fa0c6;
+  line-height: 1.3;
+}
+
+.progress {
+  margin-top: 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  background: #0f1523;
+  border-radius: 999px;
+  border: 1px solid #1f2a40;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4e7dff, #6ee7ff);
+  border-radius: 999px;
+  transition: width 0.25s ease;
+}
+
+.slider-grid {
+  margin-top: 0.8rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.8rem;
+}
+
+.field.compact span {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #8aa0d6;
+}
+
+input[type="range"] {
+  padding: 0;
+  background: transparent;
+  accent-color: #4e7dff;
+}
+
 .helper {
   margin-top: 0.8rem;
   padding: 0.75rem 1rem;
   border-radius: 12px;
   border: 1px solid #1f2a40;
   background: #0f1523;
+}
+
+.topic-list {
+  display: grid;
+  gap: 0.6rem;
+  margin-top: 0.6rem;
+}
+
+.topic-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.6rem 0.8rem;
+  border-radius: 10px;
+  border: 1px solid #1f2a40;
+  background: #0f1523;
+}
+
+.ghost.tiny {
+  padding: 0.35rem 0.8rem;
+  font-size: 0.85rem;
 }
 
 .hero {
