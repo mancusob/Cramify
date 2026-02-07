@@ -13,6 +13,15 @@ const PREFERRED_MODELS = [
 const MODEL_CACHE_TTL_MS = 60 * 60 * 1000;
 let cachedModelName = null;
 let cachedModelAt = 0;
+const RESPONSE_CACHE_TTL_MS = 60 * 60 * 1000;
+const responseCache = new Map();
+
+const LEVEL_LABELS = {
+  0: "Starting from zero",
+  1: "Basic familiarity",
+  2: "Intermediate",
+  3: "Advanced / Review"
+};
 
 async function listModels(apiKey) {
   const response = await fetch(`${API_BASE_URL}/models?key=${apiKey}`);
@@ -85,32 +94,32 @@ async function generateContent(apiKey, modelName, prompt) {
   return response.json();
 }
 
-function buildPrompt(payload) {
+function buildPrompt({ course, level, topic, stepTitle, stepDescription }) {
+  const levelLabel = LEVEL_LABELS[level] || LEVEL_LABELS[0];
   return `
-You are an expert exam strategist. Allocate study hours across topics to maximize expected grade improvement.
-Constraints:
-- Total allocated hours must equal ${payload.hoursAvailable} hours (within +/- 0.1).
-- Be realistic: allocate at least 0.5 hours per topic if any time is allocated.
-- Base the allocation on domain knowledge: prerequisite chains, baseline understanding needs, and relative difficulty.
-- Avoid giving identical allocations unless topics are truly comparable in difficulty and prerequisite importance.
-- Reasons must explicitly mention the inferred difficulty or prerequisite role.
+You are an expert tutor. Teach the user this specific learning step, then provide sample questions with answers.
+
+Course: ${course}
+Student level: ${levelLabel}
+Topic: ${topic}
+Learning step: ${stepTitle}
+Step description: ${stepDescription}
+
+Requirements:
+- Explain the concept clearly for the given student level.
+- Provide 2-4 short explanation blocks with titles.
+- Then provide 3-5 sample questions with short answers.
+- Keep it concise and exam-focused.
 
 Return JSON only with this exact shape:
 {
-  "allocations": {
-    "<topic name>": {
-      "hours": <hours number>,
-      "reason": "<short explanation, 1 sentence>"
-    }
-  }
+  "explanations": [
+    { "title": "<short title>", "body": "<2-4 sentences>" }
+  ],
+  "questions": [
+    { "prompt": "<question>", "answer": "<short answer>" }
+  ]
 }
-
-Data:
-Course: ${payload.course}
-Level: ${payload.level}
-Hours until exam: ${payload.hoursUntil}
-Topics:
-${payload.topics.map((topic) => `- ${topic.name}`).join("\n")}
 `;
 }
 
@@ -125,6 +134,17 @@ export async function POST(request) {
 
   try {
     const payload = await request.json();
+    const cacheKey = JSON.stringify({
+      course: payload.course,
+      level: payload.level,
+      topic: payload.topic,
+      stepTitle: payload.stepTitle,
+      stepDescription: payload.stepDescription
+    });
+    const cached = responseCache.get(cacheKey);
+    if (cached && Date.now() - cached.at < RESPONSE_CACHE_TTL_MS) {
+      return NextResponse.json(cached.value);
+    }
     const modelName = await getModelName(apiKey);
     const result = await generateContent(
       apiKey,
@@ -143,11 +163,16 @@ export async function POST(request) {
     }
 
     const parsed = JSON.parse(text.slice(jsonStart, jsonEnd + 1));
-    return NextResponse.json({ allocations: parsed.allocations || {} });
+    const responseBody = {
+      explanations: parsed.explanations || [],
+      questions: parsed.questions || []
+    };
+    responseCache.set(cacheKey, { at: Date.now(), value: responseBody });
+    return NextResponse.json(responseBody);
   } catch (error) {
-    console.error("AI allocation failed:", error);
+    console.error("AI subtopic lesson failed:", error);
     return NextResponse.json(
-      { error: error?.message || "Allocation failed." },
+      { error: error?.message || "Subtopic fetch failed." },
       { status: 500 }
     );
   }

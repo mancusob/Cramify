@@ -4,10 +4,17 @@ export const runtime = "nodejs";
 
 const API_BASE_URL = "https://generativelanguage.googleapis.com/v1";
 const PREFERRED_MODELS = [
+  "gemini-2.5-flash",
+  "gemini-2.0-flash",
   "gemini-1.5-flash",
   "gemini-1.5-pro",
   "gemini-1.0-pro"
 ];
+const MODEL_CACHE_TTL_MS = 60 * 60 * 1000;
+let cachedModelName = null;
+let cachedModelAt = 0;
+const RESPONSE_CACHE_TTL_MS = 60 * 60 * 1000;
+const responseCache = new Map();
 
 const LEVEL_LABELS = {
   0: "Starting from zero",
@@ -49,6 +56,16 @@ async function pickModelName(apiKey) {
   }
 }
 
+async function getModelName(apiKey) {
+  if (cachedModelName && Date.now() - cachedModelAt < MODEL_CACHE_TTL_MS) {
+    return cachedModelName;
+  }
+  const modelName = await pickModelName(apiKey);
+  cachedModelName = modelName;
+  cachedModelAt = Date.now();
+  return modelName;
+}
+
 async function generateContent(apiKey, modelName, prompt) {
   const response = await fetch(
     `${API_BASE_URL}/models/${modelName}:generateContent?key=${apiKey}`,
@@ -80,7 +97,7 @@ async function generateContent(apiKey, modelName, prompt) {
 function buildPrompt({ course, level, topic }) {
   const levelLabel = LEVEL_LABELS[level] || LEVEL_LABELS[0];
   return `
-You are an expert tutor. Create a step-by-step learning guide to take a student from their current knowledge level to exam-ready for the given topic.
+You are an expert tutor. Build a full learning path to take a student from their current knowledge level to exam-ready for the given topic.
 
 Student level: ${levelLabel}
 Course: ${course}
@@ -88,19 +105,34 @@ Topic: ${topic}
 
 Requirements:
 - Use your own knowledge of the topic (no external sources).
-- Steps must be ordered and actionable.
-- If level is "Starting from zero", begin with core concepts and prerequisites.
+- Include a concise overview and total time estimate (hours).
+- Break the learning path into 3-5 modules.
+- Each module should include 2-4 steps with explanations and sample questions.
+- If level is "Starting from zero", start with core concepts and prerequisites.
 - Include guided practice, short-answer drills, and exam-ready questions near the end.
-- Provide 4-7 steps total.
 
 Return JSON only with this exact shape:
 {
-  "steps": [
+  "title": "<topic title>",
+  "overview": "<2-4 sentence overview>",
+  "totalHours": <number>,
+  "modules": [
     {
       "id": "1",
-      "title": "<short step title>",
-      "description": "<1-2 sentence description>",
-      "stage": "<core_concepts|guided_practice|short_answer|exam_ready>"
+      "title": "<module title>",
+      "summary": "<1-2 sentence summary>",
+      "steps": [
+        {
+          "id": "1.1",
+          "title": "<short step title>",
+          "content": [
+            { "title": "<short title>", "body": "<2-4 sentences>" }
+          ],
+          "questions": [
+            { "prompt": "<question>", "answer": "<short answer>" }
+          ]
+        }
+      ]
     }
   ]
 }
@@ -118,7 +150,16 @@ export async function POST(request) {
 
   try {
     const payload = await request.json();
-    const modelName = await pickModelName(apiKey);
+    const cacheKey = JSON.stringify({
+      course: payload.course,
+      level: payload.level,
+      topic: payload.topic
+    });
+    const cached = responseCache.get(cacheKey);
+    if (cached && Date.now() - cached.at < RESPONSE_CACHE_TTL_MS) {
+      return NextResponse.json(cached.value);
+    }
+    const modelName = await getModelName(apiKey);
     const result = await generateContent(
       apiKey,
       modelName,
@@ -136,7 +177,14 @@ export async function POST(request) {
     }
 
     const parsed = JSON.parse(text.slice(jsonStart, jsonEnd + 1));
-    return NextResponse.json({ steps: parsed.steps || [] });
+    const responseBody = {
+      title: parsed.title || payload.topic,
+      overview: parsed.overview || "",
+      totalHours: Number(parsed.totalHours) || null,
+      modules: Array.isArray(parsed.modules) ? parsed.modules : []
+    };
+    responseCache.set(cacheKey, { at: Date.now(), value: responseBody });
+    return NextResponse.json(responseBody);
   } catch (error) {
     console.error("AI learning plan failed:", error);
     return NextResponse.json(

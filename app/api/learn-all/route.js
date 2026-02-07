@@ -13,6 +13,15 @@ const PREFERRED_MODELS = [
 const MODEL_CACHE_TTL_MS = 60 * 60 * 1000;
 let cachedModelName = null;
 let cachedModelAt = 0;
+const RESPONSE_CACHE_TTL_MS = 60 * 60 * 1000;
+const responseCache = new Map();
+
+const LEVEL_LABELS = {
+  0: "Starting from zero",
+  1: "Basic familiarity",
+  2: "Intermediate",
+  3: "Advanced / Review"
+};
 
 async function listModels(apiKey) {
   const response = await fetch(`${API_BASE_URL}/models?key=${apiKey}`);
@@ -85,32 +94,53 @@ async function generateContent(apiKey, modelName, prompt) {
   return response.json();
 }
 
-function buildPrompt(payload) {
+function buildPrompt({ course, level, topics }) {
+  const levelLabel = LEVEL_LABELS[level] || LEVEL_LABELS[0];
   return `
-You are an expert exam strategist. Allocate study hours across topics to maximize expected grade improvement.
-Constraints:
-- Total allocated hours must equal ${payload.hoursAvailable} hours (within +/- 0.1).
-- Be realistic: allocate at least 0.5 hours per topic if any time is allocated.
-- Base the allocation on domain knowledge: prerequisite chains, baseline understanding needs, and relative difficulty.
-- Avoid giving identical allocations unless topics are truly comparable in difficulty and prerequisite importance.
-- Reasons must explicitly mention the inferred difficulty or prerequisite role.
+You are an expert tutor. Build a full learning path for each topic to take a student from their current knowledge level to exam-ready.
+
+Student level: ${levelLabel}
+Course: ${course}
+Topics:
+${topics.map((topic) => `- ${topic}`).join("\n")}
+
+Requirements (for each topic):
+- Use your own knowledge of the topic (no external sources).
+- Include a concise overview and total time estimate (hours).
+- Break the learning path into 3-5 modules.
+- Each module should include 2-4 steps with explanations and sample questions.
+- If level is "Starting from zero", start with core concepts and prerequisites.
+- Include guided practice, short-answer drills, and exam-ready questions near the end.
 
 Return JSON only with this exact shape:
 {
-  "allocations": {
+  "topics": {
     "<topic name>": {
-      "hours": <hours number>,
-      "reason": "<short explanation, 1 sentence>"
+      "title": "<topic title>",
+      "overview": "<2-4 sentence overview>",
+      "totalHours": <number>,
+      "modules": [
+        {
+          "id": "1",
+          "title": "<module title>",
+          "summary": "<1-2 sentence summary>",
+          "steps": [
+            {
+              "id": "1.1",
+              "title": "<short step title>",
+              "content": [
+                { "title": "<short title>", "body": "<2-4 sentences>" }
+              ],
+              "questions": [
+                { "prompt": "<question>", "answer": "<short answer>" }
+              ]
+            }
+          ]
+        }
+      ]
     }
   }
 }
-
-Data:
-Course: ${payload.course}
-Level: ${payload.level}
-Hours until exam: ${payload.hoursUntil}
-Topics:
-${payload.topics.map((topic) => `- ${topic.name}`).join("\n")}
 `;
 }
 
@@ -125,6 +155,15 @@ export async function POST(request) {
 
   try {
     const payload = await request.json();
+    const cacheKey = JSON.stringify({
+      course: payload.course,
+      level: payload.level,
+      topics: payload.topics
+    });
+    const cached = responseCache.get(cacheKey);
+    if (cached && Date.now() - cached.at < RESPONSE_CACHE_TTL_MS) {
+      return NextResponse.json(cached.value);
+    }
     const modelName = await getModelName(apiKey);
     const result = await generateContent(
       apiKey,
@@ -143,11 +182,15 @@ export async function POST(request) {
     }
 
     const parsed = JSON.parse(text.slice(jsonStart, jsonEnd + 1));
-    return NextResponse.json({ allocations: parsed.allocations || {} });
+    const responseBody = {
+      topics: parsed.topics || {}
+    };
+    responseCache.set(cacheKey, { at: Date.now(), value: responseBody });
+    return NextResponse.json(responseBody);
   } catch (error) {
-    console.error("AI allocation failed:", error);
+    console.error("AI learning path batch failed:", error);
     return NextResponse.json(
-      { error: error?.message || "Allocation failed." },
+      { error: error?.message || "Learning path failed." },
       { status: 500 }
     );
   }

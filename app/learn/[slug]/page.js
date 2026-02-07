@@ -18,6 +18,8 @@ export default function TopicLearn() {
   const [stepStatus, setStepStatus] = useState({});
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState("");
+  const [hasFetched, setHasFetched] = useState(false);
+  const [pathData, setPathData] = useState(null);
 
   useEffect(() => {
     const raw = sessionStorage.getItem("cramifyAiPlan");
@@ -34,6 +36,7 @@ export default function TopicLearn() {
     const slug = params?.slug;
     if (!plan?.topics?.length || !slug) return;
     const stepsRaw = sessionStorage.getItem(`cramifyTopicSteps:${slug}`);
+    const pathRaw = sessionStorage.getItem(`cramifyTopicPath:${slug}`);
     const statusRaw = sessionStorage.getItem(`cramifyTopicStepStatus:${slug}`);
     const progressRaw = sessionStorage.getItem(`cramifyTopicProgress:${slug}`);
     if (stepsRaw) {
@@ -42,6 +45,13 @@ export default function TopicLearn() {
         setSteps(Array.isArray(parsed) ? parsed : []);
       } catch {
         setSteps([]);
+      }
+    }
+    if (pathRaw) {
+      try {
+        setPathData(JSON.parse(pathRaw));
+      } catch {
+        setPathData(null);
       }
     }
     if (statusRaw) {
@@ -69,52 +79,57 @@ export default function TopicLearn() {
     }
   }, [plan, params]);
 
-  useEffect(() => {
+  const loadSteps = async () => {
     const slug = params?.slug;
     if (!plan?.topics?.length || !slug) return;
-    if (steps.length) return;
     const match = plan.topics.find((name) => slugify(name) === slug);
     if (!match) return;
-    const loadSteps = async () => {
-      setStatus("loading");
-      setError("");
-      try {
-        const response = await fetch("/api/learn", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            course: plan.course,
-            level: plan.level,
-            topic: match
-          })
-        });
-        if (!response.ok) {
-          const responseClone = response.clone();
-          let errorMessage = "Learning plan failed.";
-          try {
-            const errorBody = await response.json();
-            if (errorBody?.error) errorMessage = errorBody.error;
-          } catch {
-            const errorText = await responseClone.text();
-            if (errorText) errorMessage = errorText;
-          }
-          throw new Error(errorMessage);
+    setStatus("loading");
+    setError("");
+    try {
+      const response = await fetch("/api/learn", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          course: plan.course,
+          level: plan.level,
+          topic: match
+        })
+      });
+      if (!response.ok) {
+        const responseClone = response.clone();
+        let errorMessage = "Learning plan failed.";
+        try {
+          const errorBody = await response.json();
+          if (errorBody?.error) errorMessage = errorBody.error;
+        } catch {
+          const errorText = await responseClone.text();
+          if (errorText) errorMessage = errorText;
         }
-        const result = await response.json();
-        const nextSteps = Array.isArray(result.steps) ? result.steps : [];
-        setSteps(nextSteps);
-        sessionStorage.setItem(
-          `cramifyTopicSteps:${slug}`,
-          JSON.stringify(nextSteps)
-        );
-        setStatus("ready");
-      } catch (error) {
-        setStatus("error");
-        setError(error?.message || "Learning plan failed.");
+        throw new Error(errorMessage);
       }
-    };
-    loadSteps();
-  }, [plan, params, steps.length]);
+      const result = await response.json();
+      setPathData(result);
+      sessionStorage.setItem(`cramifyTopicPath:${slug}`, JSON.stringify(result));
+      const modules = Array.isArray(result?.modules) ? result.modules : [];
+      const nextSteps = modules.flatMap((module) =>
+        Array.isArray(module.steps)
+          ? module.steps.map((step) => ({ ...step, moduleId: module.id }))
+          : []
+      );
+      setSteps(nextSteps);
+      sessionStorage.setItem(
+        `cramifyTopicSteps:${slug}`,
+        JSON.stringify(nextSteps)
+      );
+      setStatus("ready");
+      setHasFetched(true);
+    } catch (error) {
+      setStatus("error");
+      setError(error?.message || "Learning plan failed.");
+      setHasFetched(true);
+    }
+  };
 
   useEffect(() => {
     const slug = params?.slug;
@@ -232,62 +247,112 @@ export default function TopicLearn() {
             {status === "loading" && (
               <p className="muted">Building your step-by-step guide...</p>
             )}
+            {status === "idle" && stepsWithIds.length === 0 && (
+              <button type="button" className="primary" onClick={loadSteps}>
+                Generate step-by-step guide
+              </button>
+            )}
             {status === "error" && (
               <p className="muted">AI unavailable. {error}</p>
             )}
-            {status !== "loading" && stepsWithIds.length === 0 && (
+            {status !== "loading" && hasFetched && stepsWithIds.length === 0 && (
               <p className="muted">
                 No steps found yet. Try reloading the page.
               </p>
             )}
-            {stepsWithIds.length > 0 && (
-              <div className="checklist">
-                {stepsWithIds.map((step) => (
-                  <label key={step.id} className="checklist-item">
-                    <input
-                      type="checkbox"
-                      checked={Boolean(stepStatus[step.id])}
-                      onChange={(event) => {
-                        setStepStatus((prev) => {
-                          const next = { ...prev };
-                          if (event.target.checked) {
-                            next[step.id] = "done";
-                          } else {
-                            delete next[step.id];
-                          }
-                          return next;
-                        });
-                      }}
-                    />
+            {pathData?.overview && (
+              <div className="info-card">
+                <span className="info-label">Overview</span>
+                <p className="muted">{pathData.overview}</p>
+              </div>
+            )}
+            {Array.isArray(pathData?.modules) && pathData.modules.length > 0 && (
+              <div className="stack">
+                {pathData.modules.map((module) => (
+                  <div key={module.id} className="info-card stack">
                     <div>
-                      <div className="row">
-                        <strong>{step.title}</strong>
-                        {stepStatus[step.id] === "understood" && (
-                          <span className="pill">Already understand</span>
-                        )}
-                      </div>
-                      {step.description && (
-                        <p className="muted">{step.description}</p>
-                      )}
-                      <button
-                        type="button"
-                        className="ghost tiny"
-                        onClick={() =>
-                          setStepStatus((prev) => {
-                            const next = { ...prev };
-                            if (next[step.id] === "understood") {
-                              delete next[step.id];
-                            } else {
-                              next[step.id] = "understood";
-                            }
-                            return next;
-                          })
-                        }
-                      >
-                        Already understand
-                      </button>
+                      <span className="info-label">Module {module.id}</span>
+                      <strong>{module.title}</strong>
                     </div>
-                  </label>
+                    {module.summary && <p className="muted">{module.summary}</p>}
+                    <div className="checklist">
+                      {Array.isArray(module.steps) &&
+                        module.steps.map((step) => (
+                          <label key={step.id} className="checklist-item">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(stepStatus[step.id])}
+                              onChange={(event) => {
+                                setStepStatus((prev) => {
+                                  const next = { ...prev };
+                                  if (event.target.checked) {
+                                    next[step.id] = "done";
+                                  } else {
+                                    delete next[step.id];
+                                  }
+                                  return next;
+                                });
+                              }}
+                            />
+                            <div className="stack">
+                              <strong>{step.title}</strong>
+                              {Array.isArray(step.content) && (
+                                <div className="stack">
+                                  {step.content.map((item, index) => (
+                                    <div
+                                      key={`${item.title}-${index}`}
+                                      className="info-card"
+                                    >
+                                      <span className="info-label">
+                                        {item.title}
+                                      </span>
+                                      <p className="muted">{item.body}</p>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {Array.isArray(step.questions) && (
+                                <div className="stack">
+                                  <span className="info-label">
+                                    Sample questions
+                                  </span>
+                                  {step.questions.map((question, index) => (
+                                    <div
+                                      key={`${question.prompt}-${index}`}
+                                      className="info-card"
+                                    >
+                                      <strong>{question.prompt}</strong>
+                                      {question.answer && (
+                                        <p className="muted">
+                                          {question.answer}
+                                        </p>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              <button
+                                type="button"
+                                className="ghost tiny"
+                                onClick={() =>
+                                  setStepStatus((prev) => {
+                                    const next = { ...prev };
+                                    if (next[step.id] === "understood") {
+                                      delete next[step.id];
+                                    } else {
+                                      next[step.id] = "understood";
+                                    }
+                                    return next;
+                                  })
+                                }
+                              >
+                                Already understand
+                              </button>
+                            </div>
+                          </label>
+                        ))}
+                    </div>
+                  </div>
                 ))}
               </div>
             )}

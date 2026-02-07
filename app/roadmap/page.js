@@ -31,6 +31,7 @@ export default function Roadmap() {
   const [aiStatus, setAiStatus] = useState("idle");
   const [aiError, setAiError] = useState("");
   const [aiClearedNotice, setAiClearedNotice] = useState(false);
+  const [aiBlocked, setAiBlocked] = useState(false);
 
   useEffect(() => {
     const raw = sessionStorage.getItem("cramifyRoadmap");
@@ -123,6 +124,25 @@ export default function Roadmap() {
     setAiStatus("loading");
     setAiError("");
     setAiClearedNotice(false);
+    const cacheKey = JSON.stringify({
+      course: data.course,
+      level: data.level,
+      hoursUntil: data.hoursUntil,
+      hoursAvailable: hoursAvailableNumber,
+      topics: data.topics
+    });
+    const cached = sessionStorage.getItem(`cramifyAiAlloc:${cacheKey}`);
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        setAiAllocations(parsed || null);
+        setAiStatus("ready");
+        setAiError("");
+        return;
+      } catch {
+        // ignore cache parse errors
+      }
+    }
     try {
       const response = await fetch("/api/allocate", {
         method: "POST",
@@ -155,6 +175,10 @@ export default function Roadmap() {
       setAiAllocations(result.allocations || null);
       setAiStatus("ready");
       setAiError("");
+      sessionStorage.setItem(
+        `cramifyAiAlloc:${cacheKey}`,
+        JSON.stringify(result.allocations || null)
+      );
       setAiClearedNotice(false);
       sessionStorage.setItem(
         "cramifyAiPlan",
@@ -172,6 +196,9 @@ export default function Roadmap() {
       setAiAllocations(null);
       setAiStatus("error");
       setAiError(error?.message || "Allocation failed.");
+      if (String(error?.message || "").toLowerCase().includes("quota")) {
+        setAiBlocked(true);
+      }
       setAiClearedNotice(false);
     }
   };
@@ -223,9 +250,13 @@ export default function Roadmap() {
             type="button"
             className="primary"
             onClick={fetchAiAllocation}
-            disabled={aiStatus === "loading"}
+            disabled={aiStatus === "loading" || aiBlocked}
           >
-            {aiStatus === "loading" ? "Calculating..." : "AI recommend time"}
+            {aiStatus === "loading"
+              ? "Calculating..."
+              : aiBlocked
+                ? "AI quota reached"
+                : "AI recommend time (1 call)"}
           </button>
           {aiStatus === "error" && (
             <span className="muted">

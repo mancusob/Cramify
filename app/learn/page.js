@@ -6,6 +6,8 @@ import { useEffect, useMemo, useState } from "react";
 export default function Learn() {
   const [plan, setPlan] = useState(null);
   const [progressBySlug, setProgressBySlug] = useState({});
+  const [batchStatus, setBatchStatus] = useState("idle");
+  const [batchError, setBatchError] = useState("");
 
   const slugify = (value) =>
     value
@@ -91,6 +93,58 @@ export default function Learn() {
       .sort((a, b) => (b.hours || 0) - (a.hours || 0));
   }, [plan, progressBySlug]);
 
+  const generateAllTopics = async () => {
+    if (!plan?.topics?.length) return;
+    setBatchStatus("loading");
+    setBatchError("");
+    try {
+      const response = await fetch("/api/learn-all", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          course: plan.course,
+          level: plan.level,
+          topics: plan.topics
+        })
+      });
+      if (!response.ok) {
+        const responseClone = response.clone();
+        let errorMessage = "Learning path failed.";
+        try {
+          const errorBody = await response.json();
+          if (errorBody?.error) errorMessage = errorBody.error;
+        } catch {
+          const errorText = await responseClone.text();
+          if (errorText) errorMessage = errorText;
+        }
+        throw new Error(errorMessage);
+      }
+      const result = await response.json();
+      const topicEntries = Object.entries(result.topics || {});
+      topicEntries.forEach(([topicName, path]) => {
+        const slug = slugify(topicName);
+        sessionStorage.setItem(
+          `cramifyTopicPath:${slug}`,
+          JSON.stringify(path)
+        );
+        const modules = Array.isArray(path?.modules) ? path.modules : [];
+        const nextSteps = modules.flatMap((module) =>
+          Array.isArray(module.steps)
+            ? module.steps.map((step) => ({ ...step, moduleId: module.id }))
+            : []
+        );
+        sessionStorage.setItem(
+          `cramifyTopicSteps:${slug}`,
+          JSON.stringify(nextSteps)
+        );
+      });
+      setBatchStatus("ready");
+    } catch (error) {
+      setBatchStatus("error");
+      setBatchError(error?.message || "Learning path failed.");
+    }
+  };
+
   return (
     <main className="container">
       <header className="header">
@@ -120,6 +174,24 @@ export default function Learn() {
             Total time: {plan.hoursAvailable} hours · Level:{" "}
             {plan.level ?? "0"}
           </p>
+          <div className="row">
+            <button
+              type="button"
+              className="primary"
+              onClick={generateAllTopics}
+              disabled={batchStatus === "loading"}
+            >
+              {batchStatus === "loading"
+                ? "Generating all topics..."
+                : "Generate all topics"}
+            </button>
+            {batchStatus === "error" && (
+              <span className="muted">{batchError}</span>
+            )}
+            {batchStatus === "ready" && (
+              <span className="muted">All topics generated.</span>
+            )}
+          </div>
           <div className="roadmap-grid">
             {topics.map((topic, index) => (
               <div key={`${topic.name}-${index}`} className="plan-card">
