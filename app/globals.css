@@ -236,6 +236,28 @@ textarea {
   transition: width 0.25s ease;
 }
 
+.checklist {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.checklist-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: 10px;
+  border: 1px solid #1f2a40;
+  background: #0f1523;
+}
+
+.checklist-item input {
+  margin-top: 0.2rem;
+  transform: scale(1.05);
+  accent-color: #4e7dff;
+}
+
+
 .slider-grid {
   margin-top: 0.8rem;
   display: grid;

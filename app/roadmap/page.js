@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 const LEVEL_LABELS = {
   0: "Starting from zero",
@@ -13,7 +13,10 @@ const LEVEL_LABELS = {
 
 function parseTopics(raw) {
   if (!raw) return [];
-  return raw
+  if (Array.isArray(raw)) {
+    return raw.map((topic) => String(topic).trim()).filter(Boolean);
+  }
+  return String(raw)
     .split(/[\n,]+/g)
     .map((topic) => topic.trim())
     .filter(Boolean);
@@ -21,6 +24,7 @@ function parseTopics(raw) {
 
 export default function Roadmap() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const [stored, setStored] = useState(null);
   const [topicMeta, setTopicMeta] = useState([]);
   const [aiAllocations, setAiAllocations] = useState(null);
@@ -61,8 +65,7 @@ export default function Roadmap() {
             name,
             complexity: 3,
             importance: 3,
-            weighting: 3,
-            progress: 0
+            weighting: 3
           }
         );
       })
@@ -153,6 +156,18 @@ export default function Roadmap() {
       setAiStatus("ready");
       setAiError("");
       setAiClearedNotice(false);
+      sessionStorage.setItem(
+        "cramifyAiPlan",
+        JSON.stringify({
+          course: data.course,
+          level: data.level,
+          hoursUntil: data.hoursUntil,
+          hoursAvailable: data.hoursAvailable,
+          topics: data.topics,
+          allocations: result.allocations || {}
+        })
+      );
+      router.push("/learn");
     } catch (error) {
       setAiAllocations(null);
       setAiStatus("error");
@@ -254,16 +269,6 @@ export default function Roadmap() {
                   </div>
                 </div>
 
-                <div className="progress">
-                  <div className="progress-bar">
-                    <div
-                      className="progress-fill"
-                      style={{ width: `${topic.progress}%` }}
-                    />
-                  </div>
-                  <span className="muted">{topic.progress}% complete</span>
-                </div>
-
                 <div className="slider-grid">
                   <label className="field compact">
                     <span>Complexity</span>
@@ -308,22 +313,6 @@ export default function Roadmap() {
                         updateTopicMeta(
                           topic.name,
                           "weighting",
-                          Number(event.target.value)
-                        )
-                      }
-                    />
-                  </label>
-                  <label className="field compact">
-                    <span>Progress</span>
-                    <input
-                      type="range"
-                      min="0"
-                      max="100"
-                      value={topic.progress}
-                      onChange={(event) =>
-                        updateTopicMeta(
-                          topic.name,
-                          "progress",
                           Number(event.target.value)
                         )
                       }
