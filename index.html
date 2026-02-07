@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Cramify</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <header class="header">
+        <div>
+          <h1>Cramify</h1>
+          <p class="subtitle">
+            Paste past exams, quizzes, midterms, or practice questions to get a
+            focused study plan based on your current knowledge level.
+          </p>
+        </div>
+        <button id="loadSample" class="ghost">Load sample</button>
+      </header>
+
+      <section class="panel">
+        <h2>1) Add Questions</h2>
+        <p class="muted">
+          Add one question per line. You can also upload a .txt file.
+        </p>
+        <div class="stack">
+          <textarea
+            id="questionsInput"
+            rows="10"
+            placeholder="e.g. Explain the chain rule and compute d/dx of sin(x^2)..."
+          ></textarea>
+          <div class="row">
+            <input id="fileInput" type="file" accept=".txt" />
+            <span id="questionCount" class="pill">0 questions</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>2) Set Your Level & Time</h2>
+        <div class="grid">
+          <label class="field">
+            <span>Current knowledge level</span>
+            <select id="knowledgeLevel">
+              <option value="0">Starting from zero</option>
+              <option value="1">Basic familiarity</option>
+              <option value="2">Intermediate</option>
+              <option value="3">Advanced / Review</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Total study time available (hours)</span>
+            <input id="studyHours" type="number" min="1" value="8" />
+          </label>
+          <label class="field">
+            <span>Max subtopics to cover</span>
+            <input id="maxSubtopics" type="number" min="1" max="12" value="6" />
+          </label>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>3) Build Study Plan</h2>
+        <div class="row">
+          <button id="generatePlan" class="primary">Generate plan</button>
+          <span id="status" class="muted"></span>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Your Study Plan</h2>
+        <div id="planOutput" class="plan"></div>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>

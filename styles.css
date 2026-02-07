@@ -1,0 +1,148 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  background: #f6f7fb;
+  color: #1f2a44;
+}
+
+h1,
+h2 {
+  margin: 0 0 0.6rem 0;
+}
+
+.container {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 3rem;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.subtitle {
+  margin: 0;
+  color: #55627a;
+}
+
+.panel {
+  background: #fff;
+  border-radius: 14px;
+  padding: 1.5rem;
+  margin-bottom: 1.2rem;
+  box-shadow: 0 10px 30px rgba(21, 30, 52, 0.08);
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+textarea,
+input,
+select {
+  width: 100%;
+  padding: 0.75rem 0.9rem;
+  border-radius: 10px;
+  border: 1px solid #d7ddea;
+  font-size: 1rem;
+  background: #f9faff;
+}
+
+textarea {
+  resize: vertical;
+  min-height: 180px;
+}
+
+.field span {
+  display: block;
+  margin-bottom: 0.4rem;
+  font-size: 0.9rem;
+  color: #52607a;
+}
+
+.primary,
+.ghost {
+  border-radius: 999px;
+  padding: 0.65rem 1.4rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+}
+
+.primary {
+  background: #3a6ff8;
+  color: #fff;
+  box-shadow: 0 8px 18px rgba(58, 111, 248, 0.35);
+}
+
+.ghost {
+  background: #eef2ff;
+  color: #3650b1;
+}
+
+.muted {
+  color: #6b778c;
+  font-size: 0.95rem;
+}
+
+.pill {
+  background: #eef2ff;
+  color: #3650b1;
+  padding: 0.35rem 0.8rem;
+  border-radius: 999px;
+  font-size: 0.9rem;
+}
+
+.plan {
+  display: grid;
+  gap: 1rem;
+}
+
+.plan-card {
+  border: 1px solid #e4e9f5;
+  border-radius: 12px;
+  padding: 1rem 1.2rem;
+  background: #fdfdff;
+}
+
+.plan-card h3 {
+  margin: 0 0 0.5rem 0;
+}
+
+.tag {
+  display: inline-block;
+  background: #f1f6ff;
+  color: #2956b3;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  margin-right: 0.4rem;
+}
+
+.list {
+  margin: 0.5rem 0 0 1rem;
+  color: #44506a;
+}
