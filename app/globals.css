@@ -5,8 +5,8 @@
 body {
   margin: 0;
   font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
-  background: #f6f7fb;
-  color: #1f2a44;
+  background: #0f1420;
+  color: #e6ecff;
 }
 
 h1,
@@ -22,9 +22,9 @@ textarea {
 }
 
 .container {
-  max-width: 980px;
+  max-width: 920px;
   margin: 0 auto;
-  padding: 2rem 1.5rem 3rem;
+  padding: 2.5rem 1.5rem 3.5rem;
 }
 
 .header {
@@ -32,20 +32,25 @@ textarea {
   justify-content: space-between;
   align-items: center;
   gap: 1.5rem;
-  margin-bottom: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.header h1 {
+  font-size: 2.1rem;
 }
 
 .subtitle {
   margin: 0;
-  color: #55627a;
+  color: #a9b6d3;
 }
 
 .panel {
-  background: #fff;
-  border-radius: 14px;
-  padding: 1.5rem;
+  background: #141c2b;
+  border-radius: 16px;
+  padding: 2rem;
   margin-bottom: 1.2rem;
-  box-shadow: 0 10px 30px rgba(21, 30, 52, 0.08);
+  border: 1px solid #1f2a40;
+  box-shadow: 0 18px 40px rgba(6, 10, 20, 0.6);
 }
 
 .stack {
@@ -77,9 +82,10 @@ select {
   width: 100%;
   padding: 0.75rem 0.9rem;
   border-radius: 10px;
-  border: 1px solid #d7ddea;
+  border: 1px solid #2a3652;
   font-size: 1rem;
-  background: #f9faff;
+  background: #0f1523;
+  color: #e6ecff;
 }
 
 textarea {
@@ -91,7 +97,7 @@ textarea {
   display: block;
   margin-bottom: 0.4rem;
   font-size: 0.9rem;
-  color: #52607a;
+  color: #90a0c0;
 }
 
 .primary,
@@ -101,27 +107,34 @@ textarea {
   font-weight: 600;
   cursor: pointer;
   border: none;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .primary {
-  background: #3a6ff8;
+  background: #4e7dff;
   color: #fff;
-  box-shadow: 0 8px 18px rgba(58, 111, 248, 0.35);
+  box-shadow: 0 12px 24px rgba(78, 125, 255, 0.35);
+}
+
+.primary:hover,
+.ghost:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 28px rgba(78, 125, 255, 0.28);
 }
 
 .ghost {
-  background: #eef2ff;
-  color: #3650b1;
+  background: #1a2336;
+  color: #c2d1ff;
 }
 
 .muted {
-  color: #6b778c;
+  color: #93a3c7;
   font-size: 0.95rem;
 }
 
 .pill {
-  background: #eef2ff;
-  color: #3650b1;
+  background: #1a2336;
+  color: #c2d1ff;
   padding: 0.35rem 0.8rem;
   border-radius: 999px;
   font-size: 0.9rem;
@@ -132,11 +145,17 @@ textarea {
   gap: 1rem;
 }
 
+.roadmap-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
 .plan-card {
-  border: 1px solid #e4e9f5;
+  border: 1px solid #1f2a40;
   border-radius: 12px;
   padding: 1rem 1.2rem;
-  background: #fdfdff;
+  background: #121a2a;
 }
 
 .plan-card h3 {
@@ -145,8 +164,8 @@ textarea {
 
 .tag {
   display: inline-block;
-  background: #f1f6ff;
-  color: #2956b3;
+  background: #1b2740;
+  color: #b9c9f5;
   padding: 0.2rem 0.6rem;
   border-radius: 999px;
   font-size: 0.8rem;
@@ -155,38 +174,65 @@ textarea {
 
 .list {
   margin: 0.5rem 0 0 1rem;
-  color: #44506a;
+  color: #c2d1ff;
 }
 
-.mascot {
-  font-size: 2.4rem;
-  background: #eef2ff;
-  border-radius: 999px;
-  width: 56px;
-  height: 56px;
-  display: grid;
-  place-items: center;
+.info-card {
+  background: #0f1523;
+  border: 1px solid #1f2a40;
+  border-radius: 12px;
+  padding: 0.9rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
 }
 
-.mascot-bubble {
-  background: #f7f9ff;
-  border-radius: 16px;
-  padding: 0.9rem 1.1rem;
-  border: 1px solid #e3e9fb;
-  max-width: 520px;
+.info-label {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #8aa0d6;
 }
 
-.bubble-title {
-  margin: 0 0 0.35rem 0;
-  font-weight: 600;
+.helper {
+  margin-top: 0.8rem;
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
+  border: 1px solid #1f2a40;
+  background: #0f1523;
+}
+
+.hero {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+}
+
+.hero-title {
+  margin: 0;
+  font-size: 1.7rem;
+}
+
+.eyebrow {
+  margin: 0;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #8aa0d6;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #5e6f93;
 }
 
 .pop-card {
-  background: #fff;
+  background: #141c2b;
   border-radius: 18px;
   padding: 1.6rem;
-  border: 1px solid #e2e8f6;
-  box-shadow: 0 18px 40px rgba(21, 30, 52, 0.12);
+  border: 1px solid #1f2a40;
+  box-shadow: 0 18px 40px rgba(6, 10, 20, 0.6);
 }
 
 .screen {
