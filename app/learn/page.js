@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import confetti from "canvas-confetti";
 
 const LEVEL_LABELS = {
   0: "Starting from zero",
@@ -16,6 +17,7 @@ export default function Learn() {
   const [batchStatus, setBatchStatus] = useState("idle");
   const [batchError, setBatchError] = useState("");
   const [remainingMs, setRemainingMs] = useState(null);
+  const [showCongrats, setShowCongrats] = useState(false);
   const PATH_CACHE_VERSION = "v4-mcq-math";
 
   const slugify = (value) =>
@@ -125,6 +127,34 @@ export default function Learn() {
   const topics = useMemo(() => {
     if (!plan?.topics?.length) return [];
     const allocations = plan.allocations || {};
+    const topicMetaRaw = sessionStorage.getItem("cramifyTopicMeta");
+    let fallbackAllocations = {};
+    try {
+      const parsedMeta = topicMetaRaw ? JSON.parse(topicMetaRaw) : {};
+      const metaMap =
+        parsedMeta && typeof parsedMeta === "object" && !Array.isArray(parsedMeta)
+          ? parsedMeta
+          : {};
+      const metaList = plan.topics.map((name) => ({
+        name,
+        ...(metaMap[name] || {})
+      }));
+      const scores = metaList.map((topic) =>
+        Number(topic.complexity || 3) *
+        Number(topic.importance || 3) *
+        Number(topic.weighting || 3)
+      );
+      const totalScore = scores.reduce((sum, score) => sum + score, 0);
+      const hoursAvailable = Number(plan.hoursAvailable || 0);
+      fallbackAllocations = metaList.reduce((acc, topic, index) => {
+        const share =
+          totalScore > 0 ? (scores[index] / totalScore) * hoursAvailable : 0;
+        acc[topic.name] = Math.max(share, 0.5);
+        return acc;
+      }, {});
+    } catch {
+      fallbackAllocations = {};
+    }
     return plan.topics
       .map((name) => {
         const entry = allocations[name];
@@ -133,7 +163,9 @@ export default function Learn() {
             ? entry
             : typeof entry?.hours === "number"
               ? entry.hours
-              : null;
+              : typeof fallbackAllocations[name] === "number"
+                ? fallbackAllocations[name]
+                : null;
         const reason = typeof entry?.reason === "string" ? entry.reason : "";
         const slug = slugify(name);
         const progress = progressBySlug[slug] || { completed: 0, total: 0 };
@@ -145,6 +177,22 @@ export default function Learn() {
       })
       .sort((a, b) => (b.hours || 0) - (a.hours || 0));
   }, [plan, progressBySlug]);
+
+  const allTopicsComplete =
+    topics.length > 0 && topics.every((topic) => topic.progressRatio >= 1);
+
+  useEffect(() => {
+    if (!allTopicsComplete) {
+      setShowCongrats(false);
+      return;
+    }
+    setShowCongrats(true);
+    confetti({
+      particleCount: 160,
+      spread: 80,
+      origin: { y: 0.6 }
+    });
+  }, [allTopicsComplete]);
 
   const generateAllTopics = async () => {
     if (!plan?.topics?.length) return;
@@ -182,9 +230,20 @@ export default function Learn() {
       const missingTopics = [];
       plan.topics.forEach((topicName) => {
         const slug = slugify(topicName);
-        const exact = topicMap[topicName];
-        const fallbackKey = normalizedKeys[slug];
-        const path = exact || (fallbackKey ? topicMap[fallbackKey] : null);
+        const existingPathRaw = sessionStorage.getItem(topicPathKey(slug));
+        let path = null;
+        if (existingPathRaw) {
+          try {
+            path = JSON.parse(existingPathRaw);
+          } catch {
+            path = null;
+          }
+        }
+        if (!path) {
+          const exact = topicMap[topicName];
+          const fallbackKey = normalizedKeys[slug];
+          path = exact || (fallbackKey ? topicMap[fallbackKey] : null);
+        }
         if (!path) {
           missingTopics.push(topicName);
           return;
@@ -215,12 +274,14 @@ export default function Learn() {
 
   useEffect(() => {
     if (!plan?.topics?.length) return;
-    const hasAnyPath = plan.topics.some((topic) =>
-      sessionStorage.getItem(topicPathKey(slugify(topic)))
+    const missing = plan.topics.filter(
+      (topic) => !sessionStorage.getItem(topicPathKey(slugify(topic)))
     );
-    if (hasAnyPath || batchStatus === "loading" || batchStatus === "ready") {
+    if (missing.length === 0) {
+      if (batchStatus !== "ready") setBatchStatus("ready");
       return;
     }
+    if (batchStatus === "loading") return;
     generateAllTopics();
   }, [plan]);
 
@@ -274,6 +335,23 @@ export default function Learn() {
               </button>
             </div>
           )}
+          {allTopicsComplete && showCongrats && (
+            <div className="congrats-overlay">
+              <div className="congrats-card">
+                <h2>Congratulations!</h2>
+                <p className="muted">
+                  You have completed all of the content. Good luck!
+                </p>
+                <button
+                  type="button"
+                  className="ghost"
+                  onClick={() => setShowCongrats(false)}
+                >
+                  Back
+                </button>
+              </div>
+            </div>
+          )}
           <div className="roadmap-grid">
             {topics.map((topic, index) => (
               <div key={`${topic.name}-${index}`} className="plan-card">
@@ -317,15 +395,13 @@ export default function Learn() {
                     Start with core definitions, then work through a few
                     representative problems, and finish with a summary sheet.
                   </p>
-                  {topic.progressRatio >= 1 ? (
-                    <p className="pill" style={{ color: "#22c55e" }}>
-                      Topic has been completed.
-                    </p>
-                  ) : (
-                    <Link className="primary" href={`/learn/${topic.slug}`}>
-                      Start learning this topic
-                    </Link>
-                  )}
+                  <Link className="primary" href={`/learn/${topic.slug}`}>
+                    {topic.progressRatio >= 1
+                      ? "Review this topic"
+                      : topic.progressRatio > 0
+                        ? "Continue learning this topic"
+                        : "Start learning this topic"}
+                  </Link>
                 </div>
               </div>
             ))}

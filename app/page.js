@@ -66,6 +66,12 @@ export default function Home() {
                 placeholder="e.g. Circuits I (EE 201)"
                 value={courseName}
                 onChange={(event) => setCourseName(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    setStep(1);
+                  }
+                }}
               />
             </label>
           </div>
@@ -112,6 +118,14 @@ export default function Home() {
                 placeholder="e.g. 48"
                 value={hoursUntilExam}
                 onChange={(event) => setHoursUntilExam(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    if (Number(hoursUntilExam || 0) > 0) {
+                      setStep(2);
+                    }
+                  }
+                }}
               />
             </label>
           </div>
@@ -120,6 +134,7 @@ export default function Home() {
               type="button"
               className="primary"
               onClick={() => setStep(2)}
+              disabled={Number(hoursUntilExam || 0) <= 0}
             >
               Next
             </button>
@@ -139,7 +154,7 @@ export default function Home() {
           </div>
           <div className="grid">
             <label className="field">
-              <span>Hours available to study</span>
+              <span>Amount of hours you plan to study</span>
               <input
                 type="number"
                 min="1"
@@ -165,10 +180,7 @@ export default function Home() {
           </div>
           <div className="pop-card pop-in">
             <h2>Set your scope</h2>
-            <p className="muted">
-              What’s the max number of subtopics you want to cover? List the
-              topics you need to study.
-            </p>
+            <p className="muted">List the topics you need to study.</p>
             <label className="field">
               <span>Add topics one by one</span>
               <div className="row">

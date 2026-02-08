@@ -53,7 +53,11 @@ export default function TopicLearn() {
   const [questionAnswers, setQuestionAnswers] = useState({});
   const [answerVisible, setAnswerVisible] = useState({});
   const [answerFeedback, setAnswerFeedback] = useState({});
+  const [answerMessage, setAnswerMessage] = useState({});
+  const [stepStatusLoaded, setStepStatusLoaded] = useState(false);
+  const [questionStateLoaded, setQuestionStateLoaded] = useState(false);
   const PATH_CACHE_VERSION = "v4-mcq-math";
+  const QUESTION_STATE_VERSION = "v1";
 
   const topicPathKey = (slug) =>
     `cramifyTopicPath:${PATH_CACHE_VERSION}:${slug}`;
@@ -74,6 +78,7 @@ export default function TopicLearn() {
   useEffect(() => {
     const slug = params?.slug;
     if (!plan?.topics?.length || !slug) return;
+    setStepStatusLoaded(false);
     const stepsRaw = sessionStorage.getItem(topicStepsKey(slug));
     const pathRaw = sessionStorage.getItem(topicPathKey(slug));
     const statusRaw = sessionStorage.getItem(`cramifyTopicStepStatus:${slug}`);
@@ -116,7 +121,28 @@ export default function TopicLearn() {
         setStepStatus({});
       }
     }
+    setStepStatusLoaded(true);
   }, [plan, params]);
+
+  useEffect(() => {
+    const slug = params?.slug;
+    if (!slug) return;
+    setQuestionStateLoaded(false);
+    const raw = sessionStorage.getItem(
+      `cramifyQuestionState:${QUESTION_STATE_VERSION}:${slug}`
+    );
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw);
+      setQuestionAnswers(parsed?.questionAnswers || {});
+      setAnswerFeedback(parsed?.answerFeedback || {});
+      setAnswerMessage(parsed?.answerMessage || {});
+      setAnswerVisible(parsed?.answerVisible || {});
+    } catch {
+      // ignore parse errors
+    }
+    setQuestionStateLoaded(true);
+  }, [params]);
 
   useEffect(() => {
     if (pathData) {
@@ -130,11 +156,34 @@ export default function TopicLearn() {
   useEffect(() => {
     const slug = params?.slug;
     if (!slug) return;
+    if (!stepStatusLoaded) return;
     sessionStorage.setItem(
       `cramifyTopicStepStatus:${slug}`,
       JSON.stringify(stepStatus)
     );
-  }, [stepStatus, params]);
+  }, [stepStatus, params, stepStatusLoaded]);
+
+  useEffect(() => {
+    const slug = params?.slug;
+    if (!slug) return;
+    if (!questionStateLoaded) return;
+    sessionStorage.setItem(
+      `cramifyQuestionState:${QUESTION_STATE_VERSION}:${slug}`,
+      JSON.stringify({
+        questionAnswers,
+        answerFeedback,
+        answerMessage,
+        answerVisible
+      })
+    );
+  }, [
+    questionAnswers,
+    answerFeedback,
+    answerMessage,
+    answerVisible,
+    params,
+    questionStateLoaded
+  ]);
 
   const topic = useMemo(() => {
     const slug = params?.slug;
@@ -450,24 +499,31 @@ export default function TopicLearn() {
                                                 Number.isInteger(selected) &&
                                                 Number.isInteger(correctIndex) &&
                                                 selected === correctIndex;
+                                              setQuestionAnswers((prev) => ({
+                                                ...prev,
+                                                [step.id]: {
+                                                  ...(prev[step.id] || {}),
+                                                  [index]: selected
+                                                }
+                                              }));
                                               setAnswerFeedback((prev) => ({
                                                 ...prev,
                                                 [step.id]: {
                                                   ...(prev[step.id] || {}),
                                                   [index]: correct
-                                                    ? "good job! correct."
-                                                    : "try again."
+                                                    ? "correct"
+                                                    : "incorrect"
                                                 }
                                               }));
-                                                if (!correct) {
-                                                  setQuestionAnswers((prev) => ({
-                                                    ...prev,
-                                                    [step.id]: {
-                                                      ...(prev[step.id] || {}),
-                                                      [index]: selected
-                                                    }
-                                                  }));
+                                              setAnswerMessage((prev) => ({
+                                                ...prev,
+                                                [step.id]: {
+                                                  ...(prev[step.id] || {}),
+                                                  [index]: correct
+                                                    ? "Good job! Correct."
+                                                    : "Try again."
                                                 }
+                                              }));
                                               }}
                                             >
                                               Check answer
@@ -480,6 +536,13 @@ export default function TopicLearn() {
                                               className="ghost tiny"
                                               onClick={() => {
                                                 setAnswerFeedback((prev) => ({
+                                                  ...prev,
+                                                  [step.id]: {
+                                                    ...(prev[step.id] || {}),
+                                                    [index]: undefined
+                                                  }
+                                                }));
+                                                setAnswerMessage((prev) => ({
                                                   ...prev,
                                                   [step.id]: {
                                                     ...(prev[step.id] || {}),
@@ -520,6 +583,11 @@ export default function TopicLearn() {
                                             </button>
                                           )}
                                         </div>
+                                        {answerMessage[step.id]?.[index] && (
+                                          <p className="muted">
+                                            {answerMessage[step.id][index]}
+                                          </p>
+                                        )}
                                         {answerVisible[step.id]?.[index] &&
                                           answerFeedback[step.id]?.[index] !==
                                             "correct" &&
@@ -569,9 +637,9 @@ export default function TopicLearn() {
             )}
             <div className="row">
               <Link className="ghost" href="/learn">
-                Back to topics
+                Back to menu
               </Link>
-              {nextTopicSlug && (
+              {progressRatio < 1 && nextTopicSlug && (
                 <Link className="primary" href={`/learn/${nextTopicSlug}`}>
                   Next topic
                 </Link>

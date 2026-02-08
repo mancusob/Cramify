@@ -34,6 +34,7 @@ export default function Roadmap() {
   const [aiBlocked, setAiBlocked] = useState(false);
   const [aiLoadedFromAction, setAiLoadedFromAction] = useState(false);
   const [remainingMs, setRemainingMs] = useState(null);
+  const [topicMetaInitialized, setTopicMetaInitialized] = useState(false);
 
   useEffect(() => {
     const raw = sessionStorage.getItem("cramifyRoadmap");
@@ -45,6 +46,15 @@ export default function Roadmap() {
       }
     }
   }, []);
+
+  const normalizeTopics = (list) =>
+    (Array.isArray(list) ? list : [])
+      .map((topic) => String(topic).trim().toLowerCase())
+      .filter(Boolean)
+      .sort();
+
+  const sameTopics = (a, b) =>
+    JSON.stringify(normalizeTopics(a)) === JSON.stringify(normalizeTopics(b));
 
   useEffect(() => {
     const hasParams = ["course", "level", "hoursUntil", "hoursAvailable", "topics"]
@@ -84,28 +94,23 @@ export default function Roadmap() {
     try {
       const rawPlan = sessionStorage.getItem("cramifyAiPlan");
       const parsedPlan = rawPlan ? JSON.parse(rawPlan) : null;
-      const sameTopics =
-        Array.isArray(parsedPlan?.topics) &&
-        JSON.stringify(parsedPlan.topics) === JSON.stringify(topics);
-      if (sameTopics && parsedPlan?.allocations) {
+      if (parsedPlan?.allocations && Object.keys(parsedPlan.allocations).length) {
         allocations = parsedPlan.allocations;
       }
     } catch {
       // ignore parse errors
     }
-    sessionStorage.setItem(
-      "cramifyAiPlan",
-      JSON.stringify({
-        course,
-        level,
-        hoursUntil,
-        hoursAvailable,
-        topics,
-        allocations,
-        createdAt,
-        examAt
-      })
-    );
+    const nextAiPlan = {
+      course,
+      level,
+      hoursUntil,
+      hoursAvailable,
+      topics,
+      allocations,
+      createdAt,
+      examAt
+    };
+    sessionStorage.setItem("cramifyAiPlan", JSON.stringify(nextAiPlan));
   }, [searchParams, stored]);
 
   const data = useMemo(() => {
@@ -152,11 +157,31 @@ export default function Roadmap() {
     remainingMs != null ? formatCountdown(remainingMs) : data.hoursUntil;
 
   useEffect(() => {
-    setTopicMeta((prev) =>
+    if (!data.topics.length) return;
+    if (topicMetaInitialized) return;
+    let storedMap = {};
+    try {
+      const raw = sessionStorage.getItem("cramifyTopicMeta");
+      const parsed = raw ? JSON.parse(raw) : {};
+      if (Array.isArray(parsed)) {
+        storedMap = parsed.reduce((acc, topic) => {
+          if (topic?.name) acc[topic.name] = topic;
+          return acc;
+        }, {});
+      } else if (parsed && typeof parsed === "object") {
+        storedMap = parsed;
+      }
+    } catch {
+      storedMap = {};
+    }
+    if (stored?.topicMeta && typeof stored.topicMeta === "object") {
+      storedMap = { ...storedMap, ...stored.topicMeta };
+    }
+    setTopicMeta(
       data.topics.map((name) => {
-        const existing = prev.find((topic) => topic.name === name);
+        const stored = storedMap?.[name];
         return (
-          existing || {
+          stored || {
             name,
             complexity: 3,
             importance: 3,
@@ -165,33 +190,8 @@ export default function Roadmap() {
         );
       })
     );
-  }, [data.topics]);
-
-  useEffect(() => {
-    const raw = sessionStorage.getItem("cramifyTopicMeta");
-    if (!raw) return;
-    try {
-      const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed)) return;
-      setTopicMeta((prev) =>
-        data.topics.map((name) => {
-          const stored = parsed.find((topic) => topic.name === name);
-          const existing = prev.find((topic) => topic.name === name);
-          return (
-            stored ||
-            existing || {
-              name,
-              complexity: 3,
-              importance: 3,
-              weighting: 3
-            }
-          );
-        })
-      );
-    } catch {
-      // ignore parse errors
-    }
-  }, [data.topics]);
+    setTopicMetaInitialized(true);
+  }, [data.topics, topicMetaInitialized]);
 
   const hoursAvailableNumber = Number(data.hoursAvailable || 0);
   const hoursUntilNumber =
@@ -237,12 +237,33 @@ export default function Roadmap() {
     return "";
   };
 
+  const persistTopicMeta = (nextMeta) => {
+    if (!nextMeta.length) return;
+    const map = nextMeta.reduce((acc, topic) => {
+      acc[topic.name] = topic;
+      return acc;
+    }, {});
+    sessionStorage.setItem("cramifyTopicMeta", JSON.stringify(map));
+    try {
+      const raw = sessionStorage.getItem("cramifyRoadmap");
+      const parsed = raw ? JSON.parse(raw) : {};
+      sessionStorage.setItem(
+        "cramifyRoadmap",
+        JSON.stringify({ ...parsed, topicMeta: map })
+      );
+    } catch {
+      // ignore parse errors
+    }
+  };
+
   const updateTopicMeta = (topicName, field, value) => {
-    setTopicMeta((prev) =>
-      prev.map((item) =>
+    setTopicMeta((prev) => {
+      const next = prev.map((item) =>
         item.name === topicName ? { ...item, [field]: value } : item
-      )
-    );
+      );
+      persistTopicMeta(next);
+      return next;
+    });
     if (aiAllocations) {
       setAiAllocations(null);
       setAiStatus("idle");
@@ -252,15 +273,17 @@ export default function Roadmap() {
   };
 
   const resetTopicMeta = () => {
-    setTopicMeta((prev) =>
-      prev.map((topic) => ({
+    setTopicMeta((prev) => {
+      const next = prev.map((topic) => ({
         ...topic,
         complexity: 3,
         importance: 3,
         weighting: 3,
         progress: 0
-      }))
-    );
+      }));
+      persistTopicMeta(next);
+      return next;
+    });
     setAiAllocations(null);
     setAiStatus("idle");
     setAiError("");
@@ -268,9 +291,9 @@ export default function Roadmap() {
   };
 
   useEffect(() => {
-    if (!data.topics.length) return;
-    sessionStorage.setItem("cramifyTopicMeta", JSON.stringify(topicMeta));
-  }, [topicMeta, data.topics.length]);
+    if (!topicMeta.length) return;
+    persistTopicMeta(topicMeta);
+  }, [topicMeta]);
 
   const fetchAiAllocation = async () => {
     if (!data.topics.length || hoursAvailableNumber <= 0) return;
@@ -365,7 +388,21 @@ export default function Roadmap() {
 
   useEffect(() => {
     if (!data.topics.length) return;
-    const allocationsForPlan = aiAllocations || localAllocations;
+    let persistedAllocations = null;
+    try {
+      const rawPlan = sessionStorage.getItem("cramifyAiPlan");
+      const parsed = rawPlan ? JSON.parse(rawPlan) : null;
+      if (parsed?.allocations && Object.keys(parsed.allocations).length) {
+        persistedAllocations = parsed.allocations;
+      }
+    } catch {
+      persistedAllocations = null;
+    }
+    const allocationsForPlan =
+      aiAllocations || persistedAllocations || localAllocations;
+    if (!aiAllocations && persistedAllocations) {
+      setAiAllocations(persistedAllocations);
+    }
     sessionStorage.setItem(
       "cramifyAiPlan",
       JSON.stringify({
@@ -465,7 +502,11 @@ export default function Roadmap() {
           <button type="button" className="ghost" onClick={resetTopicMeta}>
             Reset sliders
           </button>
-          <Link className="ghost" href="/learn">
+          <Link
+            className="ghost"
+            href="/learn"
+            onClick={() => persistTopicMeta(topicMeta)}
+          >
             Continue to learning plan
           </Link>
           {aiStatus === "error" && (
