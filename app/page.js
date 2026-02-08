@@ -141,7 +141,7 @@ export default function Home() {
       if (messageIndex >= welcomeMessage.length) {
         clearInterval(interval);
       }
-    }, 30);
+    }, 15);
     return () => clearInterval(interval);
   }, [step, welcomeMessage, welcomeTitle]);
 
@@ -153,9 +153,6 @@ export default function Home() {
             <h1>Cramify</h1>
             <p className="subtitle">Build a custom cram plan in minutes.</p>
           </div>
-          <button type="button" className="ghost">
-            Start demo
-          </button>
         </header>
       )}
 
