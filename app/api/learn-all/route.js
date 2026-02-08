@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { jsonrepair } from "jsonrepair";
 
 export const runtime = "nodejs";
 
@@ -112,6 +113,8 @@ Requirements (for each topic):
 - If level is "Starting from zero", start with core concepts and prerequisites.
 - Include guided practice, short-answer drills, and exam-ready questions near the end.
 - Render all math using LaTeX wrapped in $...$ (inline) or $$...$$ (block).
+- Use the exact topic names as keys in the "topics" object. Do not rename or merge topics.
+- Return valid JSON only. Escape backslashes as needed.
 
 Return JSON only with this exact shape:
 {
@@ -147,6 +150,96 @@ Return JSON only with this exact shape:
   }
 }
 `;
+}
+
+function buildFallbackTopic(topic) {
+  return {
+    title: topic,
+    overview: `Quick roadmap for ${topic}. Focus on core definitions, then guided practice, and finish with exam-style questions.`,
+    totalHours: 1.5,
+    modules: [
+      {
+        id: "1",
+        title: "Core concepts",
+        summary: "Learn the essential definitions and formulas.",
+        steps: [
+          {
+            id: "1.1",
+            title: "Key definitions",
+            content: [
+              {
+                title: "Definition focus",
+                body: `Review the core definitions for ${topic} and how they connect.`
+              }
+            ],
+            questions: [
+              {
+                prompt: `What is the key idea behind ${topic}?`,
+                options: [
+                  "A fundamental definition or rule",
+                  "A historical anecdote",
+                  "A calculator shortcut",
+                  "A random fact"
+                ],
+                correctIndex: 0
+              }
+            ]
+          }
+        ]
+      },
+      {
+        id: "2",
+        title: "Guided practice",
+        summary: "Work through representative problems.",
+        steps: [
+          {
+            id: "2.1",
+            title: "Practice problems",
+            content: [
+              {
+                title: "Worked examples",
+                body: `Solve 2-3 standard problems for ${topic}, checking each step.`
+              }
+            ],
+            questions: [
+              {
+                prompt: `Which step usually comes first in a ${topic} problem?`,
+                options: [
+                  "Identify knowns and unknowns",
+                  "Jump to the final answer",
+                  "Skip units",
+                  "Ignore constraints"
+                ],
+                correctIndex: 0
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  };
+}
+
+function fixInvalidBackslashes(jsonText) {
+  return jsonText.replace(/\\(?!["\\/bfnrtu])/g, "\\\\");
+}
+
+function stripCodeFence(text) {
+  return text.replace(/```(?:json)?/g, "").trim();
+}
+
+function safeParseJson(rawText) {
+  const stripped = stripCodeFence(rawText);
+  try {
+    return JSON.parse(stripped);
+  } catch {
+    const fixed = fixInvalidBackslashes(stripped);
+    try {
+      return JSON.parse(fixed);
+    } catch {
+      return JSON.parse(jsonrepair(stripped));
+    }
+  }
 }
 
 export async function POST(request) {
@@ -186,10 +279,16 @@ export async function POST(request) {
       );
     }
 
-    const parsed = JSON.parse(text.slice(jsonStart, jsonEnd + 1));
-    const responseBody = {
-      topics: parsed.topics || {}
-    };
+    const rawJson = text.slice(jsonStart, jsonEnd + 1);
+    const parsed = safeParseJson(rawJson);
+    const topicsMap = parsed.topics || {};
+    const requestedTopics = Array.isArray(payload.topics) ? payload.topics : [];
+    requestedTopics.forEach((topic) => {
+      if (!topicsMap[topic]) {
+        topicsMap[topic] = buildFallbackTopic(topic);
+      }
+    });
+    const responseBody = { topics: topicsMap };
     responseCache.set(cacheKey, { at: Date.now(), value: responseBody });
     return NextResponse.json(responseBody);
   } catch (error) {

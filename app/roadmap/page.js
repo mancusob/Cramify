@@ -32,6 +32,7 @@ export default function Roadmap() {
   const [aiError, setAiError] = useState("");
   const [aiClearedNotice, setAiClearedNotice] = useState(false);
   const [aiBlocked, setAiBlocked] = useState(false);
+  const [aiLoadedFromAction, setAiLoadedFromAction] = useState(false);
   const [remainingMs, setRemainingMs] = useState(null);
 
   useEffect(() => {
@@ -79,6 +80,19 @@ export default function Roadmap() {
 
     setStored(nextStored);
     sessionStorage.setItem("cramifyRoadmap", JSON.stringify(nextStored));
+    let allocations = {};
+    try {
+      const rawPlan = sessionStorage.getItem("cramifyAiPlan");
+      const parsedPlan = rawPlan ? JSON.parse(rawPlan) : null;
+      const sameTopics =
+        Array.isArray(parsedPlan?.topics) &&
+        JSON.stringify(parsedPlan.topics) === JSON.stringify(topics);
+      if (sameTopics && parsedPlan?.allocations) {
+        allocations = parsedPlan.allocations;
+      }
+    } catch {
+      // ignore parse errors
+    }
     sessionStorage.setItem(
       "cramifyAiPlan",
       JSON.stringify({
@@ -87,7 +101,9 @@ export default function Roadmap() {
         hoursUntil,
         hoursAvailable,
         topics,
-        allocations: {}
+        allocations,
+        createdAt,
+        examAt
       })
     );
   }, [searchParams, stored]);
@@ -312,6 +328,7 @@ export default function Roadmap() {
       setAiAllocations(result.allocations || null);
       setAiStatus("ready");
       setAiError("");
+      setAiLoadedFromAction(true);
       sessionStorage.setItem(
         `cramifyAiAlloc:${cacheKey}`,
         JSON.stringify(result.allocations || null)
@@ -325,7 +342,13 @@ export default function Roadmap() {
           hoursUntil: hoursUntilNumber.toFixed(1),
           hoursAvailable: data.hoursAvailable,
           topics: data.topics,
-          allocations: result.allocations || {}
+          allocations: result.allocations || {},
+          createdAt: stored?.createdAt ?? Date.now(),
+          examAt:
+            stored?.examAt ??
+            (Number(data.hoursUntil) > 0
+              ? Date.now() + Number(data.hoursUntil) * 60 * 60 * 1000
+              : null)
         })
       );
       router.push("/learn");
@@ -351,7 +374,13 @@ export default function Roadmap() {
         hoursUntil: hoursUntilNumber.toFixed(1),
         hoursAvailable: data.hoursAvailable,
         topics: data.topics,
-        allocations: allocationsForPlan
+        allocations: allocationsForPlan,
+        createdAt: stored?.createdAt ?? Date.now(),
+        examAt:
+          stored?.examAt ??
+          (Number(data.hoursUntil) > 0
+            ? Date.now() + Number(data.hoursUntil) * 60 * 60 * 1000
+            : null)
       })
     );
   }, [
@@ -363,6 +392,20 @@ export default function Roadmap() {
     data.topics,
     hoursUntilNumber
   ]);
+
+  useEffect(() => {
+    const rawPlan = sessionStorage.getItem("cramifyAiPlan");
+    if (!rawPlan) return;
+    try {
+      const parsed = JSON.parse(rawPlan);
+      if (!parsed?.allocations || !data.topics.length) return;
+      setAiAllocations(parsed.allocations);
+      setAiStatus("idle");
+      setAiError("");
+    } catch {
+      // ignore parse errors
+    }
+  }, [data.topics.length]);
 
   return (
     <main className="container">
@@ -434,7 +477,7 @@ export default function Roadmap() {
           {aiClearedNotice && (
             <span className="muted">AI recommendation cleared due to edits.</span>
           )}
-          {aiStatus === "ready" && (
+          {aiStatus === "ready" && aiLoadedFromAction && (
             <span className="muted">AI recommendations loaded.</span>
           )}
         </div>

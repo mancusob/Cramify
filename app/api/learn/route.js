@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { jsonrepair } from "jsonrepair";
 
 export const runtime = "nodejs";
 
@@ -111,6 +112,7 @@ Requirements:
 - If level is "Starting from zero", start with core concepts and prerequisites.
 - Include guided practice, short-answer drills, and exam-ready questions near the end.
 - Render all math using LaTeX wrapped in $...$ (inline) or $$...$$ (block).
+- Return valid JSON only. Escape backslashes as needed.
 
 Return JSON only with this exact shape:
 {
@@ -142,6 +144,28 @@ Return JSON only with this exact shape:
   ]
 }
 `;
+}
+
+function fixInvalidBackslashes(jsonText) {
+  return jsonText.replace(/\\(?!["\\/bfnrtu])/g, "\\\\");
+}
+
+function stripCodeFence(text) {
+  return text.replace(/```(?:json)?/g, "").trim();
+}
+
+function safeParseJson(rawText) {
+  const stripped = stripCodeFence(rawText);
+  try {
+    return JSON.parse(stripped);
+  } catch {
+    const fixed = fixInvalidBackslashes(stripped);
+    try {
+      return JSON.parse(fixed);
+    } catch {
+      return JSON.parse(jsonrepair(stripped));
+    }
+  }
 }
 
 export async function POST(request) {
@@ -181,7 +205,8 @@ export async function POST(request) {
       );
     }
 
-    const parsed = JSON.parse(text.slice(jsonStart, jsonEnd + 1));
+    const rawJson = text.slice(jsonStart, jsonEnd + 1);
+    const parsed = safeParseJson(rawJson);
     const responseBody = {
       title: parsed.title || payload.topic,
       overview: parsed.overview || "",

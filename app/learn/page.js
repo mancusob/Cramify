@@ -99,12 +99,7 @@ export default function Learn() {
   }, [plan]);
 
   useEffect(() => {
-    const examAt =
-      plan?.examAt != null
-        ? Number(plan.examAt)
-        : Number(plan?.hoursUntil) > 0
-          ? Date.now() + Number(plan.hoursUntil) * 60 * 60 * 1000
-          : null;
+    const examAt = plan?.examAt != null ? Number(plan.examAt) : null;
     if (!examAt) return;
     const tick = () => {
       const next = Math.max(examAt - Date.now(), 0);
@@ -178,9 +173,22 @@ export default function Learn() {
         throw new Error(errorMessage);
       }
       const result = await response.json();
-      const topicEntries = Object.entries(result.topics || {});
-      topicEntries.forEach(([topicName, path]) => {
+      const topicMap = result.topics || {};
+      const normalizedKeys = Object.keys(topicMap).reduce((acc, key) => {
+        acc[slugify(key)] = key;
+        return acc;
+      }, {});
+
+      const missingTopics = [];
+      plan.topics.forEach((topicName) => {
         const slug = slugify(topicName);
+        const exact = topicMap[topicName];
+        const fallbackKey = normalizedKeys[slug];
+        const path = exact || (fallbackKey ? topicMap[fallbackKey] : null);
+        if (!path) {
+          missingTopics.push(topicName);
+          return;
+        }
         sessionStorage.setItem(topicPathKey(slug), JSON.stringify(path));
         const modules = Array.isArray(path?.modules) ? path.modules : [];
         const nextSteps = modules.flatMap((module) =>
@@ -190,6 +198,13 @@ export default function Learn() {
         );
         sessionStorage.setItem(topicStepsKey(slug), JSON.stringify(nextSteps));
       });
+      if (missingTopics.length > 0) {
+        setBatchError(
+          `Missing learning paths for: ${missingTopics.join(", ")}`
+        );
+        setBatchStatus("error");
+        return;
+      }
       setProgressBySlug(buildProgress(plan.topics));
       setBatchStatus("ready");
     } catch (error) {
@@ -239,11 +254,25 @@ export default function Learn() {
             {formatCountdown(remainingMs)} · Level:{" "}
             {LEVEL_LABELS[plan.level] || LEVEL_LABELS[0]}
           </p>
-          {batchStatus === "loading" && (
-            <p className="muted">Generating learning paths...</p>
-          )}
+          <div className="helper">
+            {batchStatus === "loading" && (
+              <p className="muted">Generating learning plans...</p>
+            )}
+            {batchStatus === "ready" && (
+              <p className="muted">Learning plans generated.</p>
+            )}
+          </div>
           {batchStatus === "error" && (
-            <p className="muted">{batchError}</p>
+            <div className="row">
+              <span className="muted">{batchError}</span>
+              <button
+                type="button"
+                className="ghost"
+                onClick={generateAllTopics}
+              >
+                Try again
+              </button>
+            </div>
           )}
           <div className="roadmap-grid">
             {topics.map((topic, index) => (
