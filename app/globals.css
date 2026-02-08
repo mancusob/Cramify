@@ -127,6 +127,21 @@ textarea {
   color: #c2d1ff;
 }
 
+.mcq-choice {
+  width: 100%;
+  justify-content: flex-start;
+  text-align: left;
+  border-radius: 12px;
+  padding: 0.85rem 1rem;
+  white-space: normal;
+  line-height: 1.35;
+}
+
+.mcq-choice.primary,
+.mcq-choice.ghost {
+  border-radius: 12px;
+}
+
 .muted {
   color: #93a3c7;
   font-size: 0.95rem;

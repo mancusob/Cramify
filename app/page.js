@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { extractTextFromPdfFile } from "../lib/pdfClient";
 
 export default function Home() {
   const [step, setStep] = useState(0);
@@ -11,6 +12,11 @@ export default function Home() {
   const [hoursAvailable, setHoursAvailable] = useState("");
   const [topics, setTopics] = useState([]);
   const [topicInput, setTopicInput] = useState("");
+  const [examQuestionsPdf, setExamQuestionsPdf] = useState(null);
+  const [examAnswersPdf, setExamAnswersPdf] = useState(null);
+  const [examStatus, setExamStatus] = useState("idle");
+  const [examError, setExamError] = useState("");
+  const [examReady, setExamReady] = useState(false);
   const router = useRouter();
 
   const hoursUntilNumber = Number(hoursUntilExam || 0);
@@ -35,6 +41,104 @@ export default function Home() {
 
   const removeTopic = (topicToRemove) => {
     setTopics((prev) => prev.filter((topic) => topic !== topicToRemove));
+  };
+
+  useEffect(() => {
+    const raw = sessionStorage.getItem("cramifyExamBank");
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object" && Array.isArray(parsed.items)) {
+        setExamReady(true);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const ingestExamPdfs = async () => {
+    if (!examQuestionsPdf || !examAnswersPdf) return;
+    setExamStatus("loading");
+    setExamError("");
+    setExamReady(false);
+    try {
+      const [questionsText, answersText] = await Promise.all([
+        extractTextFromPdfFile(examQuestionsPdf),
+        extractTextFromPdfFile(examAnswersPdf)
+      ]);
+
+      if (!questionsText.trim()) {
+        throw new Error(
+          "Could not extract text from the exam questions PDF (is it scanned images?)."
+        );
+      }
+      if (!answersText.trim()) {
+        throw new Error(
+          "Could not extract text from the exam answers PDF (is it scanned images?)."
+        );
+      }
+
+      const response = await fetch("/api/exam/ingest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          course: courseName || "Your course",
+          level: knowledgeLevel || "0",
+          topics,
+          questionsText,
+          answersText
+        })
+      });
+
+      if (!response.ok) {
+        const responseClone = response.clone();
+        let errorMessage = "Exam ingest failed.";
+        try {
+          const errorBody = await response.json();
+          if (errorBody?.error) errorMessage = errorBody.error;
+        } catch {
+          const errorText = await responseClone.text();
+          if (errorText) errorMessage = errorText;
+        }
+        throw new Error(errorMessage);
+      }
+
+      const result = await response.json();
+      const bank = result?.bank;
+      if (!bank || !Array.isArray(bank.items)) {
+        throw new Error("Exam ingest returned an invalid bank.");
+      }
+      sessionStorage.setItem("cramifyExamBank", JSON.stringify(bank));
+      setExamStatus("ready");
+      setExamReady(true);
+      setExamError("");
+    } catch (error) {
+      setExamStatus("error");
+      setExamError(error?.message || "Exam ingest failed.");
+      setExamReady(false);
+    }
+  };
+
+  const goToRoadmap = () => {
+    const payload = {
+      course: courseName,
+      level: knowledgeLevel,
+      hoursUntil: hoursUntilExam,
+      hoursAvailable,
+      topics
+    };
+    sessionStorage.setItem("cramifyRoadmap", JSON.stringify(payload));
+    router.push(
+      `/roadmap?course=${encodeURIComponent(
+        courseName
+      )}&level=${encodeURIComponent(
+        knowledgeLevel
+      )}&hoursUntil=${encodeURIComponent(
+        hoursUntilExam
+      )}&hoursAvailable=${encodeURIComponent(
+        hoursAvailable
+      )}&topics=${encodeURIComponent(topics.join(", "))}`
+    );
   };
 
   return (
@@ -211,36 +315,63 @@ export default function Home() {
                 ))
               )}
             </div>
+
+            <div className="stack" style={{ marginTop: "1rem" }}>
+              <h2>Use your exam PDFs (optional)</h2>
+              <p className="muted">
+                Upload your exam questions PDF and answer/solutions PDF. We&apos;ll
+                parse them and build a question bank (1 AI call) to generate
+                exam-style practice questions later.
+              </p>
+              <div className="grid">
+                <label className="field">
+                  <span>Exam questions PDF</span>
+                  <input
+                    type="file"
+                    accept="application/pdf"
+                    onChange={(event) =>
+                      setExamQuestionsPdf(event.target.files?.[0] || null)
+                    }
+                  />
+                </label>
+                <label className="field">
+                  <span>Exam answers / solutions PDF</span>
+                  <input
+                    type="file"
+                    accept="application/pdf"
+                    onChange={(event) =>
+                      setExamAnswersPdf(event.target.files?.[0] || null)
+                    }
+                  />
+                </label>
+              </div>
+              <div className="row">
+                <button
+                  type="button"
+                  className="primary"
+                  onClick={ingestExamPdfs}
+                  disabled={
+                    examStatus === "loading" || !examQuestionsPdf || !examAnswersPdf
+                  }
+                >
+                  {examStatus === "loading"
+                    ? "Parsing PDFs..."
+                    : "Build exam question bank"}
+                </button>
+                {examStatus === "error" && (
+                  <span className="muted">Exam ingest failed. {examError}</span>
+                )}
+                {examReady && examStatus !== "loading" && (
+                  <span className="muted">Exam bank ready for Learn.</span>
+                )}
+              </div>
+            </div>
+
             <div className="row">
               <button
                 type="button"
                 className="primary"
-                onClick={() =>
-                  {
-                    const payload = {
-                      course: courseName,
-                      level: knowledgeLevel,
-                      hoursUntil: hoursUntilExam,
-                      hoursAvailable,
-                      topics
-                    };
-                    sessionStorage.setItem(
-                      "cramifyRoadmap",
-                      JSON.stringify(payload)
-                    );
-                    router.push(
-                      `/roadmap?course=${encodeURIComponent(
-                        courseName
-                      )}&level=${encodeURIComponent(
-                        knowledgeLevel
-                      )}&hoursUntil=${encodeURIComponent(
-                        hoursUntilExam
-                      )}&hoursAvailable=${encodeURIComponent(
-                        hoursAvailable
-                      )}&topics=${encodeURIComponent(topics.join(", "))}`
-                    );
-                  }
-                }
+                onClick={goToRoadmap}
               >
                 Continue
               </button>

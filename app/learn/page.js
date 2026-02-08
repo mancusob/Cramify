@@ -1,11 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 export default function Learn() {
-  const [plan, setPlan] = useState(null);
-  const [progressBySlug, setProgressBySlug] = useState({});
+  const [plan] = useState(() => {
+    if (typeof window === "undefined") return null;
+    const raw = sessionStorage.getItem("cramifyAiPlan");
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  });
 
   const slugify = (value) =>
     value
@@ -14,19 +22,9 @@ export default function Learn() {
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/(^-|-$)+/g, "");
 
-  useEffect(() => {
-    const raw = sessionStorage.getItem("cramifyAiPlan");
-    if (raw) {
-      try {
-        setPlan(JSON.parse(raw));
-      } catch (error) {
-        setPlan(null);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!plan?.topics?.length) return;
+  const progressBySlug = useMemo(() => {
+    if (typeof window === "undefined") return {};
+    if (!plan?.topics?.length) return {};
     const nextProgress = {};
     plan.topics.forEach((name) => {
       const slug = slugify(name);
@@ -61,10 +59,9 @@ export default function Learn() {
           ? Object.keys(statusMap).length
           : 0;
       const completedCount = statusCount || completed.length;
-      nextProgress[slug] = { completed: completed.length, total };
       nextProgress[slug] = { completed: completedCount, total };
     });
-    setProgressBySlug(nextProgress);
+    return nextProgress;
   }, [plan]);
 
   const topics = useMemo(() => {
