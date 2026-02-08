@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { BlockMath, InlineMath } from "react-katex";
+import ReadLesson from "../../components/ReadLesson";
 
 const slugify = (value) =>
   value
@@ -268,6 +269,31 @@ export default function TopicLearn() {
     stepsWithIds.length > 0
       ? Object.keys(effectiveStepStatus).length / stepsWithIds.length
       : 0;
+
+  const fullLessonText = useMemo(() => {
+    if (!pathData) return "";
+    const parts = [];
+    if (pathData.overview) parts.push(pathData.overview);
+    if (Array.isArray(pathData.modules)) {
+      pathData.modules.forEach((module) => {
+        if (module.title) parts.push(module.title);
+        if (module.summary) parts.push(module.summary);
+        if (Array.isArray(module.steps)) {
+          module.steps.forEach((step) => {
+            if (step.title) parts.push(step.title);
+            if (Array.isArray(step.content)) {
+              step.content.forEach((item) => {
+                if (item.title) parts.push(item.title);
+                if (item.body) parts.push(item.body);
+              });
+            }
+          });
+        }
+      });
+    }
+    return parts.join("\n\n");
+  }, [pathData]);
+
   const remainingHours =
     topic?.hours != null
       ? Math.max(topic.hours * (1 - progressRatio), 0)
@@ -319,6 +345,9 @@ export default function TopicLearn() {
               </strong>
               {topic.reason && <p className="ai-reason">{topic.reason}</p>}
             </div>
+          </div>
+          <div className="row" style={{ marginBottom: "0.5rem" }}>
+            <ReadLesson lessonText={fullLessonText} label="Read entire lesson aloud" />
           </div>
           <div className="progress">
             <div className="progress-bar">

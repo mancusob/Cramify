@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useParams } from "next/navigation";
+import ReadLesson from "../../../components/ReadLesson";
 
 const slugify = (value) =>
   value
@@ -88,6 +89,18 @@ export default function SubtopicLearn() {
     };
   }, [step, pathData]);
 
+  const fullLessonText = useMemo(() => {
+    if (!step) return "";
+    const parts = [step.title, step.description].filter(Boolean);
+    if (content?.explanations?.length) {
+      content.explanations.forEach((item) => {
+        if (item.title) parts.push(item.title);
+        if (item.body) parts.push(item.body);
+      });
+    }
+    return parts.join("\n\n");
+  }, [step, content]);
+
   return (
     <main className="container">
       <header className="header">
@@ -95,9 +108,12 @@ export default function SubtopicLearn() {
           <h1>{step?.title || "Learning Step"}</h1>
           <p className="subtitle">Learn the key ideas, then try questions.</p>
         </div>
-        <Link className="ghost" href={`/learn/${slug || ""}`}>
-          Back
-        </Link>
+        <div className="row">
+          <ReadLesson lessonText={fullLessonText} label="Read lesson aloud" />
+          <Link className="ghost" href={`/learn/${slug || ""}`}>
+            Back
+          </Link>
+        </div>
       </header>
 
       {!plan || !step ? (
