@@ -15,6 +15,7 @@ export default function Learn() {
   const [progressBySlug, setProgressBySlug] = useState({});
   const [batchStatus, setBatchStatus] = useState("idle");
   const [batchError, setBatchError] = useState("");
+  const [remainingMs, setRemainingMs] = useState(null);
   const PATH_CACHE_VERSION = "v4-mcq-math";
 
   const slugify = (value) =>
@@ -96,6 +97,35 @@ export default function Learn() {
     if (!plan?.topics?.length) return;
     setProgressBySlug(buildProgress(plan.topics));
   }, [plan]);
+
+  useEffect(() => {
+    const examAt =
+      plan?.examAt != null
+        ? Number(plan.examAt)
+        : Number(plan?.hoursUntil) > 0
+          ? Date.now() + Number(plan.hoursUntil) * 60 * 60 * 1000
+          : null;
+    if (!examAt) return;
+    const tick = () => {
+      const next = Math.max(examAt - Date.now(), 0);
+      setRemainingMs(next);
+    };
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [plan]);
+
+  const formatCountdown = (ms) => {
+    if (ms == null) return "—";
+    const totalSeconds = Math.max(Math.floor(ms / 1000), 0);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(
+      2,
+      "0"
+    )}:${String(seconds).padStart(2, "0")}`;
+  };
 
   const topics = useMemo(() => {
     if (!plan?.topics?.length) return [];
@@ -205,7 +235,8 @@ export default function Learn() {
         <section className="panel">
           <h2>{plan.course}</h2>
           <p className="muted">
-            Total time: {plan.hoursAvailable} hours · Level:{" "}
+            Total time: {plan.hoursAvailable} hours · Time remaining:{" "}
+            {formatCountdown(remainingMs)} · Level:{" "}
             {LEVEL_LABELS[plan.level] || LEVEL_LABELS[0]}
           </p>
           {batchStatus === "loading" && (

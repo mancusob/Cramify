@@ -120,10 +120,20 @@ export default function Roadmap() {
     return () => clearInterval(interval);
   }, [stored, data.hoursUntil]);
 
+  const formatCountdown = (ms) => {
+    if (ms == null) return "—";
+    const totalSeconds = Math.max(Math.floor(ms / 1000), 0);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(
+      2,
+      "0"
+    )}:${String(seconds).padStart(2, "0")}`;
+  };
+
   const hoursUntilDisplay =
-    remainingMs != null
-      ? `${Math.max(remainingMs / 3600000, 0).toFixed(1)}`
-      : data.hoursUntil;
+    remainingMs != null ? formatCountdown(remainingMs) : data.hoursUntil;
 
   useEffect(() => {
     setTopicMeta((prev) =>
@@ -139,6 +149,32 @@ export default function Roadmap() {
         );
       })
     );
+  }, [data.topics]);
+
+  useEffect(() => {
+    const raw = sessionStorage.getItem("cramifyTopicMeta");
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return;
+      setTopicMeta((prev) =>
+        data.topics.map((name) => {
+          const stored = parsed.find((topic) => topic.name === name);
+          const existing = prev.find((topic) => topic.name === name);
+          return (
+            stored ||
+            existing || {
+              name,
+              complexity: 3,
+              importance: 3,
+              weighting: 3
+            }
+          );
+        })
+      );
+    } catch {
+      // ignore parse errors
+    }
   }, [data.topics]);
 
   const hoursAvailableNumber = Number(data.hoursAvailable || 0);
@@ -158,6 +194,14 @@ export default function Roadmap() {
       return { ...topic, score, hours: share };
     });
   }, [topicMeta, hoursAvailableNumber]);
+
+  const localAllocations = useMemo(() => {
+    const map = {};
+    allocations.forEach((topic) => {
+      map[topic.name] = Math.max(topic.hours, 0.5);
+    });
+    return map;
+  }, [allocations]);
 
   const getAiHours = (topicName) => {
     const entry = aiAllocations?.[topicName];
@@ -190,6 +234,27 @@ export default function Roadmap() {
       setAiClearedNotice(true);
     }
   };
+
+  const resetTopicMeta = () => {
+    setTopicMeta((prev) =>
+      prev.map((topic) => ({
+        ...topic,
+        complexity: 3,
+        importance: 3,
+        weighting: 3,
+        progress: 0
+      }))
+    );
+    setAiAllocations(null);
+    setAiStatus("idle");
+    setAiError("");
+    setAiClearedNotice(false);
+  };
+
+  useEffect(() => {
+    if (!data.topics.length) return;
+    sessionStorage.setItem("cramifyTopicMeta", JSON.stringify(topicMeta));
+  }, [topicMeta, data.topics.length]);
 
   const fetchAiAllocation = async () => {
     if (!data.topics.length || hoursAvailableNumber <= 0) return;
@@ -257,7 +322,7 @@ export default function Roadmap() {
         JSON.stringify({
           course: data.course,
           level: data.level,
-          hoursUntil: data.hoursUntil,
+          hoursUntil: hoursUntilNumber.toFixed(1),
           hoursAvailable: data.hoursAvailable,
           topics: data.topics,
           allocations: result.allocations || {}
@@ -274,6 +339,30 @@ export default function Roadmap() {
       setAiClearedNotice(false);
     }
   };
+
+  useEffect(() => {
+    if (!data.topics.length) return;
+    const allocationsForPlan = aiAllocations || localAllocations;
+    sessionStorage.setItem(
+      "cramifyAiPlan",
+      JSON.stringify({
+        course: data.course,
+        level: data.level,
+        hoursUntil: hoursUntilNumber.toFixed(1),
+        hoursAvailable: data.hoursAvailable,
+        topics: data.topics,
+        allocations: allocationsForPlan
+      })
+    );
+  }, [
+    aiAllocations,
+    localAllocations,
+    data.course,
+    data.level,
+    data.hoursAvailable,
+    data.topics,
+    hoursUntilNumber
+  ]);
 
   return (
     <main className="container">
@@ -302,9 +391,7 @@ export default function Roadmap() {
           </div>
           <div className="info-card">
             <span className="info-label">Hours until exam</span>
-            <strong>
-              {hoursUntilDisplay !== "—" ? `${hoursUntilDisplay}h` : "—"}
-            </strong>
+            <strong>{hoursUntilDisplay !== "—" ? hoursUntilDisplay : "—"}</strong>
           </div>
           <div className="info-card">
             <span className="info-label">Hours available</span>
@@ -331,6 +418,9 @@ export default function Roadmap() {
               : aiBlocked
                 ? "AI quota reached"
                 : "AI recommended time allocations"}
+          </button>
+          <button type="button" className="ghost" onClick={resetTopicMeta}>
+            Reset sliders
           </button>
           <Link className="ghost" href="/learn">
             Continue to learning plan
