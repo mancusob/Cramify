@@ -11,10 +11,12 @@
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "canvas": "^3.2.1",
+    "katex": "^0.16.28",
     "next": "16.1.6",
     "pdfjs-dist": "^5.4.624",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "react-katex": "^3.1.0"
   },
   "devDependencies": {
     "eslint": "^9",

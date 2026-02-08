@@ -20,6 +20,12 @@ export default function SubtopicLearn() {
   const [showAnswers, setShowAnswers] = useState(false);
   const [responses, setResponses] = useState({});
   const [feedback, setFeedback] = useState({});
+  const PATH_CACHE_VERSION = "v4-mcq-math";
+
+  const topicPathKey = (slug) =>
+    `cramifyTopicPath:${PATH_CACHE_VERSION}:${slug}`;
+  const topicStepsKey = (slug) =>
+    `cramifyTopicSteps:${PATH_CACHE_VERSION}:${slug}`;
 
   useEffect(() => {
     const raw = sessionStorage.getItem("cramifyAiPlan");
@@ -35,8 +41,8 @@ export default function SubtopicLearn() {
   useEffect(() => {
     const slug = params?.slug;
     if (!slug) return;
-    const stepsRaw = sessionStorage.getItem(`cramifyTopicSteps:${slug}`);
-    const pathRaw = sessionStorage.getItem(`cramifyTopicPath:${slug}`);
+    const stepsRaw = sessionStorage.getItem(topicStepsKey(slug));
+    const pathRaw = sessionStorage.getItem(topicPathKey(slug));
     if (stepsRaw) {
       try {
         const parsed = JSON.parse(stepsRaw);

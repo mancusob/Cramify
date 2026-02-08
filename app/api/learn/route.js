@@ -107,9 +107,10 @@ Requirements:
 - Use your own knowledge of the topic (no external sources).
 - Include a concise overview and total time estimate (hours).
 - Break the learning path into 3-5 modules.
-- Each module should include 2-4 steps with explanations and sample questions.
+- Each module should include 2-4 steps with explanations and 6-8 sample questions per step.
 - If level is "Starting from zero", start with core concepts and prerequisites.
 - Include guided practice, short-answer drills, and exam-ready questions near the end.
+- Render all math using LaTeX wrapped in $...$ (inline) or $$...$$ (block).
 
 Return JSON only with this exact shape:
 {
@@ -129,7 +130,11 @@ Return JSON only with this exact shape:
             { "title": "<short title>", "body": "<2-4 sentences>" }
           ],
           "questions": [
-            { "prompt": "<question>", "answer": "<short answer>" }
+            {
+              "prompt": "<question>",
+              "options": ["A", "B", "C", "D"],
+              "correctIndex": 0
+            }
           ]
         }
       ]

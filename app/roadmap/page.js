@@ -256,8 +256,11 @@ export default function Roadmap() {
               ? "Calculating..."
               : aiBlocked
                 ? "AI quota reached"
-                : "AI recommend time (1 call)"}
+                : "AI recommended time allocations"}
           </button>
+          <Link className="ghost" href="/learn">
+            Continue to learning plan
+          </Link>
           {aiStatus === "error" && (
             <span className="muted">
               AI unavailable.

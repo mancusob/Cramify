@@ -3,11 +3,19 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
+const LEVEL_LABELS = {
+  0: "Starting from zero",
+  1: "Basic familiarity",
+  2: "Intermediate",
+  3: "Advanced / Review"
+};
+
 export default function Learn() {
   const [plan, setPlan] = useState(null);
   const [progressBySlug, setProgressBySlug] = useState({});
   const [batchStatus, setBatchStatus] = useState("idle");
   const [batchError, setBatchError] = useState("");
+  const PATH_CACHE_VERSION = "v4-mcq-math";
 
   const slugify = (value) =>
     value
@@ -16,21 +24,14 @@ export default function Learn() {
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/(^-|-$)+/g, "");
 
-  useEffect(() => {
-    const raw = sessionStorage.getItem("cramifyAiPlan");
-    if (raw) {
-      try {
-        setPlan(JSON.parse(raw));
-      } catch (error) {
-        setPlan(null);
-      }
-    }
-  }, []);
+  const topicPathKey = (slug) =>
+    `cramifyTopicPath:${PATH_CACHE_VERSION}:${slug}`;
+  const topicStepsKey = (slug) =>
+    `cramifyTopicSteps:${PATH_CACHE_VERSION}:${slug}`;
 
-  useEffect(() => {
-    if (!plan?.topics?.length) return;
+  const buildProgress = (topicsList) => {
     const nextProgress = {};
-    plan.topics.forEach((name) => {
+    topicsList.forEach((name) => {
       const slug = slugify(name);
       const statusRaw = sessionStorage.getItem(
         `cramifyTopicStepStatus:${slug}`
@@ -38,7 +39,7 @@ export default function Learn() {
       const progressRaw = sessionStorage.getItem(
         `cramifyTopicProgress:${slug}`
       );
-      const stepsRaw = sessionStorage.getItem(`cramifyTopicSteps:${slug}`);
+      const stepsRaw = sessionStorage.getItem(topicStepsKey(slug));
       let completed = [];
       let total = 0;
       let statusMap = {};
@@ -63,10 +64,25 @@ export default function Learn() {
           ? Object.keys(statusMap).length
           : 0;
       const completedCount = statusCount || completed.length;
-      nextProgress[slug] = { completed: completed.length, total };
       nextProgress[slug] = { completed: completedCount, total };
     });
-    setProgressBySlug(nextProgress);
+    return nextProgress;
+  };
+
+  useEffect(() => {
+    const raw = sessionStorage.getItem("cramifyAiPlan");
+    if (raw) {
+      try {
+        setPlan(JSON.parse(raw));
+      } catch (error) {
+        setPlan(null);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!plan?.topics?.length) return;
+    setProgressBySlug(buildProgress(plan.topics));
   }, [plan]);
 
   const topics = useMemo(() => {
@@ -123,27 +139,33 @@ export default function Learn() {
       const topicEntries = Object.entries(result.topics || {});
       topicEntries.forEach(([topicName, path]) => {
         const slug = slugify(topicName);
-        sessionStorage.setItem(
-          `cramifyTopicPath:${slug}`,
-          JSON.stringify(path)
-        );
+        sessionStorage.setItem(topicPathKey(slug), JSON.stringify(path));
         const modules = Array.isArray(path?.modules) ? path.modules : [];
         const nextSteps = modules.flatMap((module) =>
           Array.isArray(module.steps)
             ? module.steps.map((step) => ({ ...step, moduleId: module.id }))
             : []
         );
-        sessionStorage.setItem(
-          `cramifyTopicSteps:${slug}`,
-          JSON.stringify(nextSteps)
-        );
+        sessionStorage.setItem(topicStepsKey(slug), JSON.stringify(nextSteps));
       });
+      setProgressBySlug(buildProgress(plan.topics));
       setBatchStatus("ready");
     } catch (error) {
       setBatchStatus("error");
       setBatchError(error?.message || "Learning path failed.");
     }
   };
+
+  useEffect(() => {
+    if (!plan?.topics?.length) return;
+    const hasAnyPath = plan.topics.some((topic) =>
+      sessionStorage.getItem(topicPathKey(slugify(topic)))
+    );
+    if (hasAnyPath || batchStatus === "loading" || batchStatus === "ready") {
+      return;
+    }
+    generateAllTopics();
+  }, [plan]);
 
   return (
     <main className="container">
@@ -172,26 +194,14 @@ export default function Learn() {
           <h2>{plan.course}</h2>
           <p className="muted">
             Total time: {plan.hoursAvailable} hours · Level:{" "}
-            {plan.level ?? "0"}
+            {LEVEL_LABELS[plan.level] || LEVEL_LABELS[0]}
           </p>
-          <div className="row">
-            <button
-              type="button"
-              className="primary"
-              onClick={generateAllTopics}
-              disabled={batchStatus === "loading"}
-            >
-              {batchStatus === "loading"
-                ? "Generating all topics..."
-                : "Generate all topics"}
-            </button>
-            {batchStatus === "error" && (
-              <span className="muted">{batchError}</span>
-            )}
-            {batchStatus === "ready" && (
-              <span className="muted">All topics generated.</span>
-            )}
-          </div>
+          {batchStatus === "loading" && (
+            <p className="muted">Generating learning paths...</p>
+          )}
+          {batchStatus === "error" && (
+            <p className="muted">{batchError}</p>
+          )}
           <div className="roadmap-grid">
             {topics.map((topic, index) => (
               <div key={`${topic.name}-${index}`} className="plan-card">
@@ -213,7 +223,15 @@ export default function Learn() {
                     <div className="progress-bar">
                       <div
                         className="progress-fill"
-                        style={{ width: `${topic.progressRatio * 100}%` }}
+                        style={{
+                          width: `${topic.progressRatio * 100}%`,
+                          background:
+                            topic.progressRatio >= 0.8
+                              ? "#22c55e"
+                              : topic.progressRatio >= 0.5
+                                ? "#f59e0b"
+                                : "#ef4444"
+                        }}
                       />
                     </div>
                     <span className="muted">
@@ -227,9 +245,15 @@ export default function Learn() {
                     Start with core definitions, then work through a few
                     representative problems, and finish with a summary sheet.
                   </p>
-                  <Link className="primary" href={`/learn/${topic.slug}`}>
-                    Start learning this topic
-                  </Link>
+                  {topic.progressRatio >= 1 ? (
+                    <p className="pill" style={{ color: "#22c55e" }}>
+                      Topic has been completed.
+                    </p>
+                  ) : (
+                    <Link className="primary" href={`/learn/${topic.slug}`}>
+                      Start learning this topic
+                    </Link>
+                  )}
                 </div>
               </div>
             ))}

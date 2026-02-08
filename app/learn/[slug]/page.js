@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
+import { BlockMath, InlineMath } from "react-katex";
 
 const slugify = (value) =>
   value
@@ -11,6 +12,36 @@ const slugify = (value) =>
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)+/g, "");
 
+const renderInlineMath = (text, keyPrefix) => {
+  const parts = text.split(/(\$[^$]+\$)/g);
+  return parts.map((part, index) => {
+    if (part.startsWith("$") && part.endsWith("$")) {
+      return (
+        <InlineMath key={`${keyPrefix}-${index}`}>
+          {part.slice(1, -1)}
+        </InlineMath>
+      );
+    }
+    if (!part) return null;
+    return <span key={`${keyPrefix}-${index}`}>{part}</span>;
+  });
+};
+
+const renderMath = (value) => {
+  const text = String(value ?? "");
+  const parts = text.split(/(\$\$[\s\S]+?\$\$)/g);
+  return parts.map((part, index) => {
+    if (part.startsWith("$$") && part.endsWith("$$")) {
+      return (
+        <BlockMath key={`block-${index}`}>
+          {part.slice(2, -2)}
+        </BlockMath>
+      );
+    }
+    return renderInlineMath(part, `inline-${index}`);
+  });
+};
+
 export default function TopicLearn() {
   const params = useParams();
   const [plan, setPlan] = useState(null);
@@ -18,8 +49,16 @@ export default function TopicLearn() {
   const [stepStatus, setStepStatus] = useState({});
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState("");
-  const [hasFetched, setHasFetched] = useState(false);
   const [pathData, setPathData] = useState(null);
+  const [questionAnswers, setQuestionAnswers] = useState({});
+  const [answerVisible, setAnswerVisible] = useState({});
+  const [answerFeedback, setAnswerFeedback] = useState({});
+  const PATH_CACHE_VERSION = "v4-mcq-math";
+
+  const topicPathKey = (slug) =>
+    `cramifyTopicPath:${PATH_CACHE_VERSION}:${slug}`;
+  const topicStepsKey = (slug) =>
+    `cramifyTopicSteps:${PATH_CACHE_VERSION}:${slug}`;
 
   useEffect(() => {
     const raw = sessionStorage.getItem("cramifyAiPlan");
@@ -35,8 +74,8 @@ export default function TopicLearn() {
   useEffect(() => {
     const slug = params?.slug;
     if (!plan?.topics?.length || !slug) return;
-    const stepsRaw = sessionStorage.getItem(`cramifyTopicSteps:${slug}`);
-    const pathRaw = sessionStorage.getItem(`cramifyTopicPath:${slug}`);
+    const stepsRaw = sessionStorage.getItem(topicStepsKey(slug));
+    const pathRaw = sessionStorage.getItem(topicPathKey(slug));
     const statusRaw = sessionStorage.getItem(`cramifyTopicStepStatus:${slug}`);
     const progressRaw = sessionStorage.getItem(`cramifyTopicProgress:${slug}`);
     if (stepsRaw) {
@@ -79,57 +118,14 @@ export default function TopicLearn() {
     }
   }, [plan, params]);
 
-  const loadSteps = async () => {
-    const slug = params?.slug;
-    if (!plan?.topics?.length || !slug) return;
-    const match = plan.topics.find((name) => slugify(name) === slug);
-    if (!match) return;
-    setStatus("loading");
-    setError("");
-    try {
-      const response = await fetch("/api/learn", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          course: plan.course,
-          level: plan.level,
-          topic: match
-        })
-      });
-      if (!response.ok) {
-        const responseClone = response.clone();
-        let errorMessage = "Learning plan failed.";
-        try {
-          const errorBody = await response.json();
-          if (errorBody?.error) errorMessage = errorBody.error;
-        } catch {
-          const errorText = await responseClone.text();
-          if (errorText) errorMessage = errorText;
-        }
-        throw new Error(errorMessage);
-      }
-      const result = await response.json();
-      setPathData(result);
-      sessionStorage.setItem(`cramifyTopicPath:${slug}`, JSON.stringify(result));
-      const modules = Array.isArray(result?.modules) ? result.modules : [];
-      const nextSteps = modules.flatMap((module) =>
-        Array.isArray(module.steps)
-          ? module.steps.map((step) => ({ ...step, moduleId: module.id }))
-          : []
-      );
-      setSteps(nextSteps);
-      sessionStorage.setItem(
-        `cramifyTopicSteps:${slug}`,
-        JSON.stringify(nextSteps)
-      );
+  useEffect(() => {
+    if (pathData) {
       setStatus("ready");
-      setHasFetched(true);
-    } catch (error) {
-      setStatus("error");
-      setError(error?.message || "Learning plan failed.");
-      setHasFetched(true);
+      setError("");
+    } else {
+      setStatus("idle");
     }
-  };
+  }, [pathData]);
 
   useEffect(() => {
     const slug = params?.slug;
@@ -157,6 +153,15 @@ export default function TopicLearn() {
     return { name: match, hours, reason };
   }, [plan, params]);
 
+  const nextTopicSlug = useMemo(() => {
+    const slug = params?.slug;
+    if (!plan?.topics?.length || !slug) return null;
+    const index = plan.topics.findIndex((name) => slugify(name) === slug);
+    if (index === -1) return null;
+    const nextIndex = (index + 1) % plan.topics.length;
+    return slugify(plan.topics[nextIndex]);
+  }, [plan, params]);
+
   const stepsWithIds = useMemo(
     () =>
       steps.map((step, index) => ({
@@ -167,6 +172,46 @@ export default function TopicLearn() {
       })),
     [steps]
   );
+
+  const { stepComplete, moduleComplete } = useMemo(() => {
+    const stepMap = {};
+    const moduleMap = {};
+    const modules = Array.isArray(pathData?.modules) ? pathData.modules : [];
+    modules.forEach((module) => {
+      let moduleAll = true;
+      const moduleSteps = Array.isArray(module.steps) ? module.steps : [];
+      if (moduleSteps.length === 0) moduleAll = false;
+      moduleSteps.forEach((step) => {
+        const questions = Array.isArray(step.questions) ? step.questions : [];
+        const allCorrect =
+          questions.length > 0 &&
+          questions.every(
+            (_, index) => answerFeedback[step.id]?.[index] === "correct"
+          );
+        stepMap[step.id] = allCorrect;
+        if (!allCorrect) moduleAll = false;
+      });
+      moduleMap[module.id] = moduleAll;
+    });
+    return { stepComplete: stepMap, moduleComplete: moduleMap };
+  }, [pathData, answerFeedback]);
+
+  useEffect(() => {
+    const modules = Array.isArray(pathData?.modules) ? pathData.modules : [];
+    if (!modules.length) return;
+    setStepStatus((prev) => {
+      const next = { ...prev };
+      modules.forEach((module) => {
+        if (moduleComplete[module.id]) {
+          const moduleSteps = Array.isArray(module.steps) ? module.steps : [];
+          moduleSteps.forEach((step) => {
+            next[step.id] = "done";
+          });
+        }
+      });
+      return next;
+    });
+  }, [pathData, moduleComplete]);
 
   const progressRatio =
     stepsWithIds.length > 0
@@ -228,7 +273,15 @@ export default function TopicLearn() {
             <div className="progress-bar">
               <div
                 className="progress-fill"
-                style={{ width: `${progressRatio * 100}%` }}
+                style={{
+                  width: `${progressRatio * 100}%`,
+                  background:
+                    progressRatio >= 0.8
+                      ? "#22c55e"
+                      : progressRatio >= 0.5
+                        ? "#f59e0b"
+                        : "#ef4444"
+                }}
               />
             </div>
             <span className="muted">
@@ -247,23 +300,19 @@ export default function TopicLearn() {
             {status === "loading" && (
               <p className="muted">Building your step-by-step guide...</p>
             )}
-            {status === "idle" && stepsWithIds.length === 0 && (
-              <button type="button" className="primary" onClick={loadSteps}>
-                Generate step-by-step guide
-              </button>
-            )}
             {status === "error" && (
               <p className="muted">AI unavailable. {error}</p>
             )}
-            {status !== "loading" && hasFetched && stepsWithIds.length === 0 && (
+            {!pathData && (
               <p className="muted">
-                No steps found yet. Try reloading the page.
+                No learning path found yet. Go back to the learning plan to
+                generate all topics.
               </p>
             )}
             {pathData?.overview && (
               <div className="info-card">
                 <span className="info-label">Overview</span>
-                <p className="muted">{pathData.overview}</p>
+                <p className="muted">{renderMath(pathData.overview)}</p>
               </div>
             )}
             {Array.isArray(pathData?.modules) && pathData.modules.length > 0 && (
@@ -272,17 +321,25 @@ export default function TopicLearn() {
                   <div key={module.id} className="info-card stack">
                     <div>
                       <span className="info-label">Module {module.id}</span>
-                      <strong>{module.title}</strong>
+                      <strong>{renderMath(module.title)}</strong>
                     </div>
-                    {module.summary && <p className="muted">{module.summary}</p>}
+                    {module.summary && (
+                      <p className="muted">{renderMath(module.summary)}</p>
+                    )}
                     <div className="checklist">
                       {Array.isArray(module.steps) &&
                         module.steps.map((step) => (
-                          <label key={step.id} className="checklist-item">
+                          <div key={step.id} className="checklist-item">
                             <input
                               type="checkbox"
-                              checked={Boolean(stepStatus[step.id])}
+                              checked={
+                                moduleComplete[module.id] ||
+                                Boolean(stepStatus[step.id]) ||
+                                stepComplete[step.id]
+                              }
+                              disabled={moduleComplete[module.id]}
                               onChange={(event) => {
+                                if (moduleComplete[module.id]) return;
                                 setStepStatus((prev) => {
                                   const next = { ...prev };
                                   if (event.target.checked) {
@@ -295,7 +352,7 @@ export default function TopicLearn() {
                               }}
                             />
                             <div className="stack">
-                              <strong>{step.title}</strong>
+                              <strong>{renderMath(step.title)}</strong>
                               {Array.isArray(step.content) && (
                                 <div className="stack">
                                   {step.content.map((item, index) => (
@@ -304,9 +361,11 @@ export default function TopicLearn() {
                                       className="info-card"
                                     >
                                       <span className="info-label">
-                                        {item.title}
+                                        {renderMath(item.title)}
                                       </span>
-                                      <p className="muted">{item.body}</p>
+                                      <p className="muted">
+                                        {renderMath(item.body)}
+                                      </p>
                                     </div>
                                   ))}
                                 </div>
@@ -321,41 +380,203 @@ export default function TopicLearn() {
                                       key={`${question.prompt}-${index}`}
                                       className="info-card"
                                     >
-                                      <strong>{question.prompt}</strong>
-                                      {question.answer && (
-                                        <p className="muted">
-                                          {question.answer}
-                                        </p>
-                                      )}
+                                      <strong>{renderMath(question.prompt)}</strong>
+                                      <div className="stack">
+                                        <div className="stack">
+                                          {Array.isArray(question.options) &&
+                                            question.options.map((option, optIdx) => (
+                                              <label
+                                                key={`${option}-${optIdx}`}
+                                                className="mcq-option"
+                                              >
+                                                <input
+                                                  type="radio"
+                                                  name={`${step.id}-${index}`}
+                                                  checked={
+                                                    questionAnswers[step.id]?.[index] ===
+                                                    optIdx
+                                                  }
+                                                  disabled={Boolean(
+                                                    answerFeedback[step.id]?.[index]
+                                                  )}
+                                                  onChange={() =>
+                                                    setQuestionAnswers((prev) => ({
+                                                      ...prev,
+                                                      [step.id]: {
+                                                        ...(prev[step.id] || {}),
+                                                        [index]: optIdx
+                                                      }
+                                                    }))
+                                                  }
+                                                />
+                                                <span>{renderMath(option)}</span>
+                                                {answerFeedback[step.id]?.[index] &&
+                                                  questionAnswers[step.id]?.[index] ===
+                                                    optIdx && (
+                                                  <span
+                                                    className={
+                                                      answerFeedback[step.id][index] ===
+                                                      "correct"
+                                                        ? "mcq-mark success"
+                                                        : "mcq-mark error"
+                                                    }
+                                                  >
+                                                    {answerFeedback[step.id][index] ===
+                                                    "correct"
+                                                      ? "✔"
+                                                      : "✖"}
+                                                  </span>
+                                                )}
+                                              </label>
+                                            ))}
+                                        </div>
+                                        <div className="row">
+                                          {!answerFeedback[step.id]?.[index] && (
+                                            <button
+                                              type="button"
+                                              className="ghost tiny"
+                                              onClick={() => {
+                                                const selected =
+                                                  questionAnswers[step.id]?.[index];
+                                              if (!Number.isInteger(selected)) {
+                                                return;
+                                              }
+                                              const correctIndex = Number.isInteger(
+                                                question.correctIndex
+                                              )
+                                                ? question.correctIndex
+                                                : Number(question.correctIndex);
+                                              const correct =
+                                                Number.isInteger(selected) &&
+                                                Number.isInteger(correctIndex) &&
+                                                selected === correctIndex;
+                                              setAnswerFeedback((prev) => ({
+                                                ...prev,
+                                                [step.id]: {
+                                                  ...(prev[step.id] || {}),
+                                                  [index]: correct
+                                                    ? "good job! correct."
+                                                    : "try again."
+                                                }
+                                              }));
+                                                if (!correct) {
+                                                  setQuestionAnswers((prev) => ({
+                                                    ...prev,
+                                                    [step.id]: {
+                                                      ...(prev[step.id] || {}),
+                                                      [index]: selected
+                                                    }
+                                                  }));
+                                                }
+                                              }}
+                                            >
+                                              Check answer
+                                            </button>
+                                          )}
+                                          {answerFeedback[step.id]?.[index] ===
+                                            "incorrect" && (
+                                            <button
+                                              type="button"
+                                              className="ghost tiny"
+                                              onClick={() => {
+                                                setAnswerFeedback((prev) => ({
+                                                  ...prev,
+                                                  [step.id]: {
+                                                    ...(prev[step.id] || {}),
+                                                    [index]: undefined
+                                                  }
+                                                }));
+                                                setQuestionAnswers((prev) => ({
+                                                  ...prev,
+                                                  [step.id]: {
+                                                    ...(prev[step.id] || {}),
+                                                    [index]: undefined
+                                                  }
+                                                }));
+                                              }}
+                                            >
+                                              Try again
+                                            </button>
+                                          )}
+                                          {answerFeedback[step.id]?.[index] !==
+                                            "correct" && (
+                                            <button
+                                              type="button"
+                                              className="ghost tiny"
+                                              onClick={() =>
+                                                setAnswerVisible((prev) => ({
+                                                  ...prev,
+                                                  [step.id]: {
+                                                    ...(prev[step.id] || {}),
+                                                    [index]:
+                                                      !prev[step.id]?.[index]
+                                                  }
+                                                }))
+                                              }
+                                            >
+                                              {answerVisible[step.id]?.[index]
+                                                ? "Hide answer"
+                                                : "Show answer"}
+                                            </button>
+                                          )}
+                                        </div>
+                                        {answerVisible[step.id]?.[index] &&
+                                          answerFeedback[step.id]?.[index] !==
+                                            "correct" &&
+                                          Array.isArray(question.options) && (
+                                            <p className="muted">
+                                              Answer:{" "}
+                                              {renderMath(
+                                                question.options[
+                                                  Number.isInteger(question.correctIndex)
+                                                    ? question.correctIndex
+                                                    : Number(question.correctIndex)
+                                                ] || "—"
+                                              )}
+                                            </p>
+                                          )}
+                                      </div>
                                     </div>
                                   ))}
                                 </div>
                               )}
-                              <button
-                                type="button"
-                                className="ghost tiny"
-                                onClick={() =>
-                                  setStepStatus((prev) => {
-                                    const next = { ...prev };
-                                    if (next[step.id] === "understood") {
-                                      delete next[step.id];
-                                    } else {
-                                      next[step.id] = "understood";
-                                    }
-                                    return next;
-                                  })
-                                }
-                              >
-                                Already understand
-                              </button>
+                              {!moduleComplete[module.id] && (
+                                <button
+                                  type="button"
+                                  className="ghost tiny"
+                                  onClick={() =>
+                                    setStepStatus((prev) => {
+                                      const next = { ...prev };
+                                      if (next[step.id] === "understood") {
+                                        delete next[step.id];
+                                      } else {
+                                        next[step.id] = "understood";
+                                      }
+                                      return next;
+                                    })
+                                  }
+                                >
+                                  Already understand
+                                </button>
+                              )}
                             </div>
-                          </label>
+                          </div>
                         ))}
                     </div>
                   </div>
                 ))}
               </div>
             )}
+            <div className="row">
+              <Link className="ghost" href="/learn">
+                Back to topics
+              </Link>
+              {nextTopicSlug && (
+                <Link className="primary" href={`/learn/${nextTopicSlug}`}>
+                  Next topic
+                </Link>
+              )}
+            </div>
           </div>
         </section>
       )}

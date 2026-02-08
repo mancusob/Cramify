@@ -156,6 +156,8 @@ textarea {
   border-radius: 12px;
   padding: 1rem 1.2rem;
   background: #121a2a;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .plan-card h3 {
@@ -185,6 +187,8 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .info-label {
@@ -249,12 +253,40 @@ textarea {
   border-radius: 10px;
   border: 1px solid #1f2a40;
   background: #0f1523;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .checklist-item input {
   margin-top: 0.2rem;
   transform: scale(1.05);
   accent-color: #4e7dff;
+}
+
+.mcq-option {
+  display: grid;
+  grid-template-columns: 20px 1fr auto;
+  align-items: center;
+  column-gap: 0.6rem;
+  row-gap: 0.4rem;
+}
+
+.mcq-option input {
+  margin: 0;
+  justify-self: center;
+}
+
+.mcq-mark {
+  margin-left: 0;
+  font-weight: 700;
+}
+
+.mcq-mark.success {
+  color: #22c55e;
+}
+
+.mcq-mark.error {
+  color: #ef4444;
 }
 
 
