@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
+import { BlockMath, InlineMath } from "react-katex";
 
 const slugify = (value) =>
   value
@@ -11,146 +12,188 @@ const slugify = (value) =>
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)+/g, "");
 
+const renderInlineMath = (text, keyPrefix) => {
+  const parts = text.split(/(\$[^$]+\$)/g);
+  return parts.map((part, index) => {
+    if (part.startsWith("$") && part.endsWith("$")) {
+      return (
+        <InlineMath key={`${keyPrefix}-${index}`}>
+          {part.slice(1, -1)}
+        </InlineMath>
+      );
+    }
+    if (!part) return null;
+    return <span key={`${keyPrefix}-${index}`}>{part}</span>;
+  });
+};
+
+const renderMath = (value) => {
+  const text = String(value ?? "");
+  const parts = text.split(/(\$\$[\s\S]+?\$\$)/g);
+  return parts.map((part, index) => {
+    if (part.startsWith("$$") && part.endsWith("$$")) {
+      return (
+        <BlockMath key={`block-${index}`}>
+          {part.slice(2, -2)}
+        </BlockMath>
+      );
+    }
+    return renderInlineMath(part, `inline-${index}`);
+  });
+};
+
 export default function TopicLearn() {
   const params = useParams();
-  const [plan, setPlan] = useState(null);
-  const [steps, setSteps] = useState([]);
-  const [stepStatus, setStepStatus] = useState({});
-  const [status, setStatus] = useState("idle");
-  const [error, setError] = useState("");
-  const [examBank, setExamBank] = useState(null);
-  const [examGenStatus, setExamGenStatus] = useState("idle");
-  const [examGenError, setExamGenError] = useState("");
-  const [examQuestions, setExamQuestions] = useState([]);
-  const [examShowAnswers, setExamShowAnswers] = useState({});
-  const [generatedStatus, setGeneratedStatus] = useState("idle");
-  const [generatedError, setGeneratedError] = useState("");
-  const [generatedEmphasis, setGeneratedEmphasis] = useState([]);
-  const [generatedQuestions, setGeneratedQuestions] = useState([]);
-  const [generatedShowAnswers, setGeneratedShowAnswers] = useState({});
-  const [generatedChoiceState, setGeneratedChoiceState] = useState({});
-
-  useEffect(() => {
+  const slug = params?.slug;
+  const [plan] = useState(() => {
+    if (typeof window === "undefined") return null;
     const raw = sessionStorage.getItem("cramifyAiPlan");
-    if (raw) {
-      try {
-        setPlan(JSON.parse(raw));
-      } catch (error) {
-        setPlan(null);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    const raw = sessionStorage.getItem("cramifyExamBank");
-    if (!raw) return;
+    if (!raw) return null;
     try {
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === "object" && Array.isArray(parsed.items)) {
-        setExamBank(parsed);
-      }
+      return JSON.parse(raw);
     } catch {
-      setExamBank(null);
+      return null;
     }
-  }, []);
-
-  useEffect(() => {
-    const slug = params?.slug;
-    if (!plan?.topics?.length || !slug) return;
-    const stepsRaw = sessionStorage.getItem(`cramifyTopicSteps:${slug}`);
+  });
+  const [stepStatus, setStepStatus] = useState(() => {
+    if (typeof window === "undefined") return {};
+    if (!slug) return {};
     const statusRaw = sessionStorage.getItem(`cramifyTopicStepStatus:${slug}`);
     const progressRaw = sessionStorage.getItem(`cramifyTopicProgress:${slug}`);
-    if (stepsRaw) {
-      try {
-        const parsed = JSON.parse(stepsRaw);
-        setSteps(Array.isArray(parsed) ? parsed : []);
-      } catch {
-        setSteps([]);
-      }
-    }
     if (statusRaw) {
       try {
         const parsed = JSON.parse(statusRaw);
-        setStepStatus(parsed && typeof parsed === "object" ? parsed : {});
+        return parsed && typeof parsed === "object" ? parsed : {};
       } catch {
-        setStepStatus({});
+        return {};
       }
-    } else if (progressRaw) {
+    }
+    if (progressRaw) {
       try {
         const parsed = JSON.parse(progressRaw);
         if (Array.isArray(parsed)) {
-          const nextStatus = parsed.reduce((acc, id) => {
+          return parsed.reduce((acc, id) => {
             acc[id] = "done";
             return acc;
           }, {});
-          setStepStatus(nextStatus);
-        } else {
-          setStepStatus({});
         }
+        return {};
       } catch {
-        setStepStatus({});
+        return {};
       }
     }
-  }, [plan, params]);
+    return {};
+  });
+  const [questionAnswers, setQuestionAnswers] = useState(() => {
+    if (typeof window === "undefined") return {};
+    if (!slug) return {};
+    const raw = sessionStorage.getItem(`cramifyQuestionState:v1:${slug}`);
+    if (!raw) return {};
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed?.questionAnswers || {};
+    } catch {
+      return {};
+    }
+  });
+  const [answerVisible, setAnswerVisible] = useState(() => {
+    if (typeof window === "undefined") return {};
+    if (!slug) return {};
+    const raw = sessionStorage.getItem(`cramifyQuestionState:v1:${slug}`);
+    if (!raw) return {};
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed?.answerVisible || {};
+    } catch {
+      return {};
+    }
+  });
+  const [answerFeedback, setAnswerFeedback] = useState(() => {
+    if (typeof window === "undefined") return {};
+    if (!slug) return {};
+    const raw = sessionStorage.getItem(`cramifyQuestionState:v1:${slug}`);
+    if (!raw) return {};
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed?.answerFeedback || {};
+    } catch {
+      return {};
+    }
+  });
+  const [answerMessage, setAnswerMessage] = useState(() => {
+    if (typeof window === "undefined") return {};
+    if (!slug) return {};
+    const raw = sessionStorage.getItem(`cramifyQuestionState:v1:${slug}`);
+    if (!raw) return {};
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed?.answerMessage || {};
+    } catch {
+      return {};
+    }
+  });
+  const PATH_CACHE_VERSION = "v4-mcq-math";
+  const QUESTION_STATE_VERSION = "v1";
+
+  const topicPathKey = (slug) =>
+    `cramifyTopicPath:${PATH_CACHE_VERSION}:${slug}`;
+  const topicStepsKey = (slug) =>
+    `cramifyTopicSteps:${PATH_CACHE_VERSION}:${slug}`;
+
+  const steps = useMemo(() => {
+    if (typeof window === "undefined") return [];
+    if (!slug) return [];
+    const stepsRaw = sessionStorage.getItem(topicStepsKey(slug));
+    if (!stepsRaw) return [];
+    try {
+      const parsed = JSON.parse(stepsRaw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }, [slug]);
+
+  const pathData = useMemo(() => {
+    if (typeof window === "undefined") return null;
+    if (!slug) return null;
+    const pathRaw = sessionStorage.getItem(topicPathKey(slug));
+    if (!pathRaw) return null;
+    try {
+      return JSON.parse(pathRaw);
+    } catch {
+      return null;
+    }
+  }, [slug]);
 
   useEffect(() => {
-    const slug = params?.slug;
-    if (!plan?.topics?.length || !slug) return;
-    if (steps.length) return;
-    const match = plan.topics.find((name) => slugify(name) === slug);
-    if (!match) return;
-    const loadSteps = async () => {
-      setStatus("loading");
-      setError("");
-      try {
-        const response = await fetch("/api/learn", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            course: plan.course,
-            level: plan.level,
-            topic: match
-          })
-        });
-        if (!response.ok) {
-          const responseClone = response.clone();
-          let errorMessage = "Learning plan failed.";
-          try {
-            const errorBody = await response.json();
-            if (errorBody?.error) errorMessage = errorBody.error;
-          } catch {
-            const errorText = await responseClone.text();
-            if (errorText) errorMessage = errorText;
-          }
-          throw new Error(errorMessage);
-        }
-        const result = await response.json();
-        const nextSteps = Array.isArray(result.steps) ? result.steps : [];
-        setSteps(nextSteps);
-        sessionStorage.setItem(
-          `cramifyTopicSteps:${slug}`,
-          JSON.stringify(nextSteps)
-        );
-        setStatus("ready");
-      } catch (error) {
-        setStatus("error");
-        setError(error?.message || "Learning plan failed.");
-      }
-    };
-    loadSteps();
-  }, [plan, params, steps.length]);
-
-  useEffect(() => {
-    const slug = params?.slug;
     if (!slug) return;
     sessionStorage.setItem(
       `cramifyTopicStepStatus:${slug}`,
       JSON.stringify(stepStatus)
     );
-  }, [stepStatus, params]);
+  }, [stepStatus, slug]);
+
+  useEffect(() => {
+    if (!slug) return;
+    sessionStorage.setItem(
+      `cramifyQuestionState:${QUESTION_STATE_VERSION}:${slug}`,
+      JSON.stringify({
+        questionAnswers,
+        answerFeedback,
+        answerMessage,
+        answerVisible
+      })
+    );
+  }, [
+    questionAnswers,
+    answerFeedback,
+    answerMessage,
+    answerVisible,
+    slug,
+    QUESTION_STATE_VERSION
+  ]);
 
   const topic = useMemo(() => {
-    const slug = params?.slug;
     if (!plan?.topics?.length || !slug) return null;
     const allocations = plan.allocations || {};
     const match = plan.topics.find((name) => slugify(name) === slug);
@@ -164,7 +207,15 @@ export default function TopicLearn() {
           : null;
     const reason = typeof entry?.reason === "string" ? entry.reason : "";
     return { name: match, hours, reason };
-  }, [plan, params]);
+  }, [plan, slug]);
+
+  const nextTopicSlug = useMemo(() => {
+    if (!plan?.topics?.length || !slug) return null;
+    const index = plan.topics.findIndex((name) => slugify(name) === slug);
+    if (index === -1) return null;
+    const nextIndex = (index + 1) % plan.topics.length;
+    return slugify(plan.topics[nextIndex]);
+  }, [plan, slug]);
 
   const stepsWithIds = useMemo(
     () =>
@@ -177,107 +228,50 @@ export default function TopicLearn() {
     [steps]
   );
 
+  const { stepComplete, moduleComplete } = useMemo(() => {
+    const stepMap = {};
+    const moduleMap = {};
+    const modules = Array.isArray(pathData?.modules) ? pathData.modules : [];
+    modules.forEach((module) => {
+      let moduleAll = true;
+      const moduleSteps = Array.isArray(module.steps) ? module.steps : [];
+      if (moduleSteps.length === 0) moduleAll = false;
+      moduleSteps.forEach((step) => {
+        const questions = Array.isArray(step.questions) ? step.questions : [];
+        const allCorrect =
+          questions.length > 0 &&
+          questions.every(
+            (_, index) => answerFeedback[step.id]?.[index] === "correct"
+          );
+        stepMap[step.id] = allCorrect;
+        if (!allCorrect) moduleAll = false;
+      });
+      moduleMap[module.id] = moduleAll;
+    });
+    return { stepComplete: stepMap, moduleComplete: moduleMap };
+  }, [pathData, answerFeedback]);
+
+  const effectiveStepStatus = useMemo(() => {
+    const next = { ...(stepStatus || {}) };
+    const modules = Array.isArray(pathData?.modules) ? pathData.modules : [];
+    modules.forEach((module) => {
+      if (!moduleComplete[module.id]) return;
+      const moduleSteps = Array.isArray(module.steps) ? module.steps : [];
+      moduleSteps.forEach((step) => {
+        if (step?.id) next[step.id] = "done";
+      });
+    });
+    return next;
+  }, [stepStatus, pathData, moduleComplete]);
+
   const progressRatio =
     stepsWithIds.length > 0
-      ? Object.keys(stepStatus).length / stepsWithIds.length
+      ? Object.keys(effectiveStepStatus).length / stepsWithIds.length
       : 0;
   const remainingHours =
     topic?.hours != null
       ? Math.max(topic.hours * (1 - progressRatio), 0)
       : null;
-
-  const examExamplesForTopic = useMemo(() => {
-    if (!examBank?.items?.length || !topic?.name) return [];
-    const name = topic.name.toLowerCase();
-    const matched = examBank.items.filter(
-      (it) => String(it?.topic || "").toLowerCase() === name
-    );
-    return matched;
-  }, [examBank, topic]);
-
-  const generateNewPracticeQuestions = async () => {
-    if (!plan || !topic || !examBank?.items?.length) return;
-    setGeneratedStatus("loading");
-    setGeneratedError("");
-    setGeneratedEmphasis([]);
-    setGeneratedQuestions([]);
-    setGeneratedShowAnswers({});
-    setGeneratedChoiceState({});
-    try {
-      const sourceItems =
-        examExamplesForTopic.length > 0 ? examExamplesForTopic : examBank.items;
-      const examples = sourceItems.slice(0, 20).map((it) => ({
-        question: it.question,
-        answer: it.answer
-      }));
-      if (!examples.length) {
-        throw new Error("No exam questions found in your PDFs.");
-      }
-
-      const response = await fetch("/api/exam/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          course: plan.course,
-          level: plan.level,
-          topic: topic.name,
-          examples,
-          focusCount: 5,
-          count: 5
-        })
-      });
-
-      if (!response.ok) {
-        const responseClone = response.clone();
-        let errorMessage = "Practice question generation failed.";
-        try {
-          const errorBody = await response.json();
-          if (errorBody?.error) errorMessage = errorBody.error;
-        } catch {
-          const errorText = await responseClone.text();
-          if (errorText) errorMessage = errorText;
-        }
-        throw new Error(errorMessage);
-      }
-
-      const result = await response.json();
-      const emphasizedTopics = Array.isArray(result.emphasizedTopics)
-        ? result.emphasizedTopics
-        : [];
-      const qs = Array.isArray(result.questions) ? result.questions : [];
-      setGeneratedEmphasis(emphasizedTopics);
-      setGeneratedQuestions(qs);
-      setGeneratedStatus("ready");
-    } catch (err) {
-      setGeneratedStatus("error");
-      setGeneratedError(err?.message || "Practice question generation failed.");
-    }
-  };
-
-  const startExamLearning = async () => {
-    if (!topic || !examBank?.items?.length) return;
-    setExamGenStatus("loading");
-    setExamGenError("");
-    setExamQuestions([]);
-    setExamShowAnswers({});
-    try {
-      const picked = examExamplesForTopic.slice(0, 12);
-      if (!picked.length) {
-        throw new Error("No exam questions found for this topic in your PDFs.");
-      }
-      setExamQuestions(
-        picked.map((it, idx) => ({
-          id: String(it?.id || idx + 1),
-          question: String(it?.question || ""),
-          answer: String(it?.answer || "")
-        }))
-      );
-      setExamGenStatus("ready");
-    } catch (err) {
-      setExamGenStatus("error");
-      setExamGenError(err?.message || "Failed to load exam questions.");
-    }
-  };
 
   return (
     <main className="container">
@@ -330,7 +324,15 @@ export default function TopicLearn() {
             <div className="progress-bar">
               <div
                 className="progress-fill"
-                style={{ width: `${progressRatio * 100}%` }}
+                style={{
+                  width: `${progressRatio * 100}%`,
+                  background:
+                    progressRatio >= 0.8
+                      ? "#22c55e"
+                      : progressRatio >= 0.5
+                        ? "#f59e0b"
+                        : "#ef4444"
+                }}
               />
             </div>
             <span className="muted">
@@ -346,274 +348,299 @@ export default function TopicLearn() {
               representative problems, and finish with a one-page summary of
               formulas and steps.
             </p>
-            {status === "loading" && (
-              <p className="muted">Building your step-by-step guide...</p>
-            )}
-            {status === "error" && (
-              <p className="muted">AI unavailable. {error}</p>
-            )}
-            {status !== "loading" && stepsWithIds.length === 0 && (
+            {!pathData && (
               <p className="muted">
-                No steps found yet. Try reloading the page.
+                No learning path found yet. Go back to the learning plan to
+                generate all topics.
               </p>
             )}
-            {stepsWithIds.length > 0 && (
-              <div className="checklist">
-                {stepsWithIds.map((step) => (
-                  <label key={step.id} className="checklist-item">
-                    <input
-                      type="checkbox"
-                      checked={Boolean(stepStatus[step.id])}
-                      onChange={(event) => {
-                        setStepStatus((prev) => {
-                          const next = { ...prev };
-                          if (event.target.checked) {
-                            next[step.id] = "done";
-                          } else {
-                            delete next[step.id];
-                          }
-                          return next;
-                        });
-                      }}
-                    />
+            {pathData?.overview && (
+              <div className="info-card">
+                <span className="info-label">Overview</span>
+                <p className="muted">{renderMath(pathData.overview)}</p>
+              </div>
+            )}
+            {Array.isArray(pathData?.modules) && pathData.modules.length > 0 && (
+              <div className="stack">
+                {pathData.modules.map((module) => (
+                  <div key={module.id} className="info-card stack">
                     <div>
-                      <div className="row">
-                        <strong>{step.title}</strong>
-                        {stepStatus[step.id] === "understood" && (
-                          <span className="pill">Already understand</span>
-                        )}
-                      </div>
-                      {step.description && (
-                        <p className="muted">{step.description}</p>
-                      )}
-                      <button
-                        type="button"
-                        className="ghost tiny"
-                        onClick={() =>
-                          setStepStatus((prev) => {
-                            const next = { ...prev };
-                            if (next[step.id] === "understood") {
-                              delete next[step.id];
-                            } else {
-                              next[step.id] = "understood";
-                            }
-                            return next;
-                          })
-                        }
-                      >
-                        Already understand
-                      </button>
+                      <span className="info-label">Module {module.id}</span>
+                      <strong>{renderMath(module.title)}</strong>
                     </div>
-                  </label>
+                    {module.summary && (
+                      <p className="muted">{renderMath(module.summary)}</p>
+                    )}
+                    <div className="checklist">
+                      {Array.isArray(module.steps) &&
+                        module.steps.map((step) => (
+                          <div key={step.id} className="checklist-item">
+                            <input
+                              type="checkbox"
+                              checked={
+                                moduleComplete[module.id] ||
+                                Boolean(effectiveStepStatus[step.id]) ||
+                                stepComplete[step.id]
+                              }
+                              disabled={moduleComplete[module.id]}
+                              onChange={(event) => {
+                                if (moduleComplete[module.id]) return;
+                                setStepStatus((prev) => {
+                                  const next = { ...prev };
+                                  if (event.target.checked) {
+                                    next[step.id] = "done";
+                                  } else {
+                                    delete next[step.id];
+                                  }
+                                  return next;
+                                });
+                              }}
+                            />
+                            <div className="stack">
+                              <strong>{renderMath(step.title)}</strong>
+                              {Array.isArray(step.content) && (
+                                <div className="stack">
+                                  {step.content.map((item, index) => (
+                                    <div
+                                      key={`${item.title}-${index}`}
+                                      className="info-card"
+                                    >
+                                      <span className="info-label">
+                                        {renderMath(item.title)}
+                                      </span>
+                                      <p className="muted">
+                                        {renderMath(item.body)}
+                                      </p>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {Array.isArray(step.questions) && (
+                                <div className="stack">
+                                  <span className="info-label">
+                                    Sample questions
+                                  </span>
+                                  {step.questions.map((question, index) => (
+                                    <div
+                                      key={`${question.prompt}-${index}`}
+                                      className="info-card"
+                                    >
+                                      <strong>{renderMath(question.prompt)}</strong>
+                                      <div className="stack">
+                                        <div className="stack">
+                                          {Array.isArray(question.options) &&
+                                            question.options.map((option, optIdx) => (
+                                              <label
+                                                key={`${option}-${optIdx}`}
+                                                className="mcq-option"
+                                              >
+                                                <input
+                                                  type="radio"
+                                                  name={`${step.id}-${index}`}
+                                                  checked={
+                                                    questionAnswers[step.id]?.[index] ===
+                                                    optIdx
+                                                  }
+                                                  disabled={Boolean(
+                                                    answerFeedback[step.id]?.[index]
+                                                  )}
+                                                  onChange={() =>
+                                                    setQuestionAnswers((prev) => ({
+                                                      ...prev,
+                                                      [step.id]: {
+                                                        ...(prev[step.id] || {}),
+                                                        [index]: optIdx
+                                                      }
+                                                    }))
+                                                  }
+                                                />
+                                                <span>{renderMath(option)}</span>
+                                                {answerFeedback[step.id]?.[index] &&
+                                                  questionAnswers[step.id]?.[index] ===
+                                                    optIdx && (
+                                                  <span
+                                                    className={
+                                                      answerFeedback[step.id][index] ===
+                                                      "correct"
+                                                        ? "mcq-mark success"
+                                                        : "mcq-mark error"
+                                                    }
+                                                  >
+                                                    {answerFeedback[step.id][index] ===
+                                                    "correct"
+                                                      ? "✔"
+                                                      : "✖"}
+                                                  </span>
+                                                )}
+                                              </label>
+                                            ))}
+                                        </div>
+                                        <div className="row">
+                                          {!answerFeedback[step.id]?.[index] && (
+                                            <button
+                                              type="button"
+                                              className="ghost tiny"
+                                              onClick={() => {
+                                                const selected =
+                                                  questionAnswers[step.id]?.[index];
+                                              if (!Number.isInteger(selected)) {
+                                                return;
+                                              }
+                                              const correctIndex = Number.isInteger(
+                                                question.correctIndex
+                                              )
+                                                ? question.correctIndex
+                                                : Number(question.correctIndex);
+                                              const correct =
+                                                Number.isInteger(selected) &&
+                                                Number.isInteger(correctIndex) &&
+                                                selected === correctIndex;
+                                              setQuestionAnswers((prev) => ({
+                                                ...prev,
+                                                [step.id]: {
+                                                  ...(prev[step.id] || {}),
+                                                  [index]: selected
+                                                }
+                                              }));
+                                              setAnswerFeedback((prev) => ({
+                                                ...prev,
+                                                [step.id]: {
+                                                  ...(prev[step.id] || {}),
+                                                  [index]: correct
+                                                    ? "correct"
+                                                    : "incorrect"
+                                                }
+                                              }));
+                                              setAnswerMessage((prev) => ({
+                                                ...prev,
+                                                [step.id]: {
+                                                  ...(prev[step.id] || {}),
+                                                  [index]: correct
+                                                    ? "Good job! Correct."
+                                                    : "Try again."
+                                                }
+                                              }));
+                                              }}
+                                            >
+                                              Check answer
+                                            </button>
+                                          )}
+                                          {answerFeedback[step.id]?.[index] ===
+                                            "incorrect" && (
+                                            <button
+                                              type="button"
+                                              className="ghost tiny"
+                                              onClick={() => {
+                                                setAnswerFeedback((prev) => ({
+                                                  ...prev,
+                                                  [step.id]: {
+                                                    ...(prev[step.id] || {}),
+                                                    [index]: undefined
+                                                  }
+                                                }));
+                                                setAnswerMessage((prev) => ({
+                                                  ...prev,
+                                                  [step.id]: {
+                                                    ...(prev[step.id] || {}),
+                                                    [index]: undefined
+                                                  }
+                                                }));
+                                                setQuestionAnswers((prev) => ({
+                                                  ...prev,
+                                                  [step.id]: {
+                                                    ...(prev[step.id] || {}),
+                                                    [index]: undefined
+                                                  }
+                                                }));
+                                              }}
+                                            >
+                                              Try again
+                                            </button>
+                                          )}
+                                          {answerFeedback[step.id]?.[index] !==
+                                            "correct" && (
+                                            <button
+                                              type="button"
+                                              className="ghost tiny"
+                                              onClick={() =>
+                                                setAnswerVisible((prev) => ({
+                                                  ...prev,
+                                                  [step.id]: {
+                                                    ...(prev[step.id] || {}),
+                                                    [index]:
+                                                      !prev[step.id]?.[index]
+                                                  }
+                                                }))
+                                              }
+                                            >
+                                              {answerVisible[step.id]?.[index]
+                                                ? "Hide answer"
+                                                : "Show answer"}
+                                            </button>
+                                          )}
+                                        </div>
+                                        {answerMessage[step.id]?.[index] && (
+                                          <p className="muted">
+                                            {answerMessage[step.id][index]}
+                                          </p>
+                                        )}
+                                        {answerVisible[step.id]?.[index] &&
+                                          answerFeedback[step.id]?.[index] !==
+                                            "correct" &&
+                                          Array.isArray(question.options) && (
+                                            <p className="muted">
+                                              Answer:{" "}
+                                              {renderMath(
+                                                question.options[
+                                                  Number.isInteger(question.correctIndex)
+                                                    ? question.correctIndex
+                                                    : Number(question.correctIndex)
+                                                ] || "—"
+                                              )}
+                                            </p>
+                                          )}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {!moduleComplete[module.id] && (
+                                <button
+                                  type="button"
+                                  className="ghost tiny"
+                                  onClick={() =>
+                                    setStepStatus((prev) => {
+                                      const next = { ...prev };
+                                      if (next[step.id] === "understood") {
+                                        delete next[step.id];
+                                      } else {
+                                        next[step.id] = "understood";
+                                      }
+                                      return next;
+                                    })
+                                  }
+                                >
+                                  Already understand
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
                 ))}
               </div>
             )}
-          </div>
-
-          <div className="stack">
-            <h2>Practice (from your exam PDFs)</h2>
-            {!examBank?.items?.length ? (
-              <p className="muted">
-                No exam bank found. Upload your exam questions + solutions PDFs
-                in Step 3 to see the exact exam questions here.
-              </p>
-            ) : (
-              <>
-                <div className="row">
-                  <button
-                    type="button"
-                    className="primary"
-                    onClick={startExamLearning}
-                    disabled={examGenStatus === "loading"}
-                  >
-                    {examGenStatus === "loading"
-                      ? "Loading exam questions..."
-                      : "Start learning"}
-                  </button>
-                  {examGenStatus === "error" && (
-                    <span className="muted">{examGenError}</span>
-                  )}
-                  {examGenStatus === "ready" && examQuestions.length > 0 && (
-                    <span className="muted">
-                      Loaded {examQuestions.length} exam questions.
-                    </span>
-                  )}
-                </div>
-
-                {examQuestions.length > 0 && (
-                  <div className="roadmap-grid" style={{ marginTop: "1rem" }}>
-                    {examQuestions.map((q, idx) => {
-                      const id = String(q?.id || idx + 1);
-                      const show = Boolean(examShowAnswers[id]);
-                      return (
-                        <div key={id} className="plan-card">
-                          <span className="tag">Question {idx + 1}</span>
-                          <p className="muted" style={{ marginTop: "0.35rem" }}>
-                            Pulled directly from your uploaded exam PDFs.
-                          </p>
-                          <p style={{ marginTop: "0.5rem" }}>
-                            {String(q?.question || "")}
-                          </p>
-                          <div className="row" style={{ marginTop: "0.75rem" }}>
-                            <button
-                              type="button"
-                              className="ghost"
-                              onClick={() =>
-                                setExamShowAnswers((prev) => ({
-                                  ...prev,
-                                  [id]: !prev[id]
-                                }))
-                              }
-                            >
-                              {show ? "Hide answer" : "Show answer"}
-                            </button>
-                          </div>
-                          {show && (
-                            <p className="muted" style={{ marginTop: "0.5rem" }}>
-                              <strong>Answer:</strong>{" "}
-                              {String(q?.answer || "")}
-                            </p>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                <div className="stack" style={{ marginTop: "1rem" }}>
-                  <h2>Generate new practice questions (AI)</h2>
-                  <p className="muted">
-                    Uses only your uploaded exam questions to infer what&apos;s emphasized,
-                    then creates new questions testing the same skills. Answers included.
-                  </p>
-                  <div className="row">
-                    <button
-                      type="button"
-                      className="primary"
-                      onClick={generateNewPracticeQuestions}
-                      disabled={generatedStatus === "loading"}
-                    >
-                      {generatedStatus === "loading"
-                        ? "Generating practice..."
-                        : "Generate new questions"}
-                    </button>
-                    {generatedStatus === "error" && (
-                      <span className="muted">{generatedError}</span>
-                    )}
-                    {generatedStatus === "ready" && generatedQuestions.length > 0 && (
-                      <span className="muted">
-                        Generated {generatedQuestions.length} questions.
-                      </span>
-                    )}
-                  </div>
-
-                  {generatedEmphasis.length > 0 && (
-                    <p className="muted" style={{ marginTop: "0.5rem" }}>
-                      <strong>Emphasized on your exam:</strong>{" "}
-                      {generatedEmphasis.slice(0, 8).join(", ")}
-                    </p>
-                  )}
-
-                  {generatedQuestions.length > 0 && (
-                    <div className="roadmap-grid" style={{ marginTop: "1rem" }}>
-                      {generatedQuestions.map((q, idx) => {
-                        const id = String(q?.id || `gen-${idx + 1}`);
-                        const show = Boolean(generatedShowAnswers[id]);
-                        const state = generatedChoiceState[id] || {
-                          selectedIndex: null,
-                          status: "idle"
-                        };
-                        const choices = Array.isArray(q?.choices) ? q.choices : [];
-                        const correctIdx =
-                          typeof q?.correctChoiceIndex === "number"
-                            ? q.correctChoiceIndex
-                            : -1;
-                        return (
-                          <div key={id} className="plan-card">
-                            <span className="tag">Practice {idx + 1}</span>
-                            {q?.topic && (
-                              <p className="muted" style={{ marginTop: "0.35rem" }}>
-                                Focus: {String(q.topic)}
-                              </p>
-                            )}
-                            <p style={{ marginTop: "0.5rem" }}>
-                              {String(q?.question || "")}
-                            </p>
-
-                            {choices.length === 4 && correctIdx >= 0 && (
-                              <div className="stack" style={{ marginTop: "0.75rem" }}>
-                                {choices.map((choice, cIdx) => {
-                                  const isSelected = state.selectedIndex === cIdx;
-                                  const isCorrect = correctIdx === cIdx;
-                                  const isLockedCorrect = state.status === "correct";
-                                  const buttonClass =
-                                    state.status === "correct" && isCorrect
-                                      ? "primary"
-                                      : "ghost";
-                                  return (
-                                    <button
-                                      key={`${id}-choice-${cIdx}`}
-                                      type="button"
-                                      className={`${buttonClass} mcq-choice`}
-                                      disabled={isLockedCorrect}
-                                      onClick={() => {
-                                        const nextStatus =
-                                          cIdx === correctIdx ? "correct" : "incorrect";
-                                        setGeneratedChoiceState((prev) => ({
-                                          ...prev,
-                                          [id]: { selectedIndex: cIdx, status: nextStatus }
-                                        }));
-                                      }}
-                                      style={{
-                                        textAlign: "left",
-                                        opacity: isLockedCorrect && !isCorrect ? 0.7 : 1
-                                      }}
-                                    >
-                                      {String.fromCharCode(65 + cIdx)}. {choice}
-                                      {isSelected && state.status === "incorrect"
-                                        ? " (try again)"
-                                        : ""}
-                                      {isLockedCorrect && isCorrect ? " (correct)" : ""}
-                                    </button>
-                                  );
-                                })}
-                                {state.status === "incorrect" && (
-                                  <p className="muted">Incorrect — try again.</p>
-                                )}
-                                {state.status === "correct" && (
-                                  <p className="muted">Correct.</p>
-                                )}
-                              </div>
-                            )}
-
-                            <div className="row" style={{ marginTop: "0.75rem" }}>
-                              <button
-                                type="button"
-                                className="ghost"
-                                onClick={() =>
-                                  setGeneratedShowAnswers((prev) => ({
-                                    ...prev,
-                                    [id]: !prev[id]
-                                  }))
-                                }
-                              >
-                                {show ? "Hide answer" : "Show answer"}
-                              </button>
-                            </div>
-                            {show && (
-                              <p className="muted" style={{ marginTop: "0.5rem" }}>
-                                <strong>Answer:</strong>{" "}
-                                {String(q?.answer || "")}
-                              </p>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
+            <div className="row">
+              <Link className="ghost" href="/learn">
+                Back to menu
+              </Link>
+              {progressRatio < 1 && nextTopicSlug && (
+                <Link className="primary" href={`/learn/${nextTopicSlug}`}>
+                  Next topic
+                </Link>
+              )}
+            </div>
           </div>
         </section>
       )}

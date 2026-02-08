@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { extractTextFromPdfFile } from "../lib/pdfClient";
 
 export default function Home() {
-  const [step, setStep] = useState(0);
+  const [step, setStep] = useState(-1);
   const [courseName, setCourseName] = useState("");
   const [knowledgeLevel, setKnowledgeLevel] = useState("0");
   const [hoursUntilExam, setHoursUntilExam] = useState("");
@@ -18,6 +18,11 @@ export default function Home() {
   const [examError, setExamError] = useState("");
   const [examReady, setExamReady] = useState(false);
   const router = useRouter();
+  const welcomeTitle = "Cramify";
+  const welcomeMessage =
+    "A focused study companion for cramming exams under time pressure. Build a roadmap, track progress, and stay on pace to test day.";
+  const [typedTitle, setTypedTitle] = useState("");
+  const [typedMessage, setTypedMessage] = useState("");
 
   const hoursUntilNumber = Number(hoursUntilExam || 0);
   const sleepHours = Math.ceil(hoursUntilNumber / 24) * 8;
@@ -119,39 +124,59 @@ export default function Home() {
     }
   };
 
-  const goToRoadmap = () => {
-    const payload = {
-      course: courseName,
-      level: knowledgeLevel,
-      hoursUntil: hoursUntilExam,
-      hoursAvailable,
-      topics
-    };
-    sessionStorage.setItem("cramifyRoadmap", JSON.stringify(payload));
-    router.push(
-      `/roadmap?course=${encodeURIComponent(
-        courseName
-      )}&level=${encodeURIComponent(
-        knowledgeLevel
-      )}&hoursUntil=${encodeURIComponent(
-        hoursUntilExam
-      )}&hoursAvailable=${encodeURIComponent(
-        hoursAvailable
-      )}&topics=${encodeURIComponent(topics.join(", "))}`
-    );
-  };
+  useEffect(() => {
+    if (step !== -1) return;
+    let titleIndex = 0;
+    let messageIndex = 0;
+    setTypedTitle("");
+    setTypedMessage("");
+    const interval = setInterval(() => {
+      if (titleIndex < welcomeTitle.length) {
+        titleIndex += 1;
+        setTypedTitle(welcomeTitle.slice(0, titleIndex));
+        return;
+      }
+      messageIndex += 1;
+      setTypedMessage(welcomeMessage.slice(0, messageIndex));
+      if (messageIndex >= welcomeMessage.length) {
+        clearInterval(interval);
+      }
+    }, 30);
+    return () => clearInterval(interval);
+  }, [step, welcomeMessage, welcomeTitle]);
 
   return (
     <main className="container">
-      <header className="header">
-        <div>
-          <h1>Cramify</h1>
-          <p className="subtitle">Build a custom cram plan in minutes.</p>
-        </div>
-        <button type="button" className="ghost">
-          Start demo
-        </button>
-      </header>
+      {step !== -1 && (
+        <header className="header">
+          <div>
+            <h1>Cramify</h1>
+            <p className="subtitle">Build a custom cram plan in minutes.</p>
+          </div>
+          <button type="button" className="ghost">
+            Start demo
+          </button>
+        </header>
+      )}
+
+      {step === -1 && (
+        <section className="panel screen screen-in pop-in" key="step-welcome">
+          <div className="hero">
+            <p className="eyebrow">Welcome</p>
+            <h2 className="hero-title typing">{typedTitle}</h2>
+            <p className="muted typing">{typedMessage}</p>
+          </div>
+          <div className="row">
+            <button
+              type="button"
+              className="primary"
+              onClick={() => setStep(0)}
+            >
+              Get started
+            </button>
+          </div>
+        </section>
+      )}
 
       {step === 0 && (
         <section className="panel screen screen-in" key="step-0">
@@ -170,6 +195,12 @@ export default function Home() {
                 placeholder="e.g. Circuits I (EE 201)"
                 value={courseName}
                 onChange={(event) => setCourseName(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    setStep(1);
+                  }
+                }}
               />
             </label>
           </div>
@@ -178,6 +209,7 @@ export default function Home() {
               type="button"
               className="primary"
               onClick={() => setStep(1)}
+              disabled={!courseName.trim()}
             >
               Next
             </button>
@@ -216,6 +248,14 @@ export default function Home() {
                 placeholder="e.g. 48"
                 value={hoursUntilExam}
                 onChange={(event) => setHoursUntilExam(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    if (Number(hoursUntilExam || 0) > 0) {
+                      setStep(2);
+                    }
+                  }
+                }}
               />
             </label>
           </div>
@@ -224,6 +264,7 @@ export default function Home() {
               type="button"
               className="primary"
               onClick={() => setStep(2)}
+              disabled={Number(hoursUntilExam || 0) <= 0}
             >
               Next
             </button>
@@ -243,7 +284,7 @@ export default function Home() {
           </div>
           <div className="grid">
             <label className="field">
-              <span>Hours available to study</span>
+              <span>Amount of hours you plan to study</span>
               <input
                 type="number"
                 min="1"
@@ -269,10 +310,7 @@ export default function Home() {
           </div>
           <div className="pop-card pop-in">
             <h2>Set your scope</h2>
-            <p className="muted">
-              What’s the max number of subtopics you want to cover? List the
-              topics you need to study.
-            </p>
+            <p className="muted">List the topics you need to study.</p>
             <label className="field">
               <span>Add topics one by one</span>
               <div className="row">
@@ -371,7 +409,37 @@ export default function Home() {
               <button
                 type="button"
                 className="primary"
-                onClick={goToRoadmap}
+                onClick={() =>
+                  {
+                    const createdAt = Date.now();
+                    const examAt =
+                      createdAt + Math.max(hoursUntilNumber, 0) * 60 * 60 * 1000;
+                    const payload = {
+                      course: courseName,
+                      level: knowledgeLevel,
+                      hoursUntil: hoursUntilExam,
+                      hoursAvailable,
+                      topics,
+                      createdAt,
+                      examAt
+                    };
+                    sessionStorage.setItem(
+                      "cramifyRoadmap",
+                      JSON.stringify(payload)
+                    );
+                    router.push(
+                      `/roadmap?course=${encodeURIComponent(
+                        courseName
+                      )}&level=${encodeURIComponent(
+                        knowledgeLevel
+                      )}&hoursUntil=${encodeURIComponent(
+                        hoursUntilExam
+                      )}&hoursAvailable=${encodeURIComponent(
+                        hoursAvailable
+                      )}&topics=${encodeURIComponent(topics.join(", "))}`
+                    );
+                  }
+                }
               >
                 Continue
               </button>

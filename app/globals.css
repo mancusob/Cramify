@@ -171,10 +171,14 @@ textarea {
   border-radius: 12px;
   padding: 1rem 1.2rem;
   background: #121a2a;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 .plan-card h3 {
   margin: 0 0 0.5rem 0;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 .tag {
@@ -200,6 +204,8 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .info-label {
@@ -264,12 +270,66 @@ textarea {
   border-radius: 10px;
   border: 1px solid #1f2a40;
   background: #0f1523;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .checklist-item input {
   margin-top: 0.2rem;
   transform: scale(1.05);
   accent-color: #4e7dff;
+}
+
+.mcq-option {
+  display: grid;
+  grid-template-columns: 20px 1fr auto;
+  align-items: center;
+  column-gap: 0.6rem;
+  row-gap: 0.4rem;
+}
+
+.mcq-option input {
+  margin: 0;
+  justify-self: center;
+}
+
+.mcq-mark {
+  margin-left: 0;
+  font-weight: 700;
+}
+
+.mcq-mark.success {
+  color: #22c55e;
+}
+
+.mcq-mark.error {
+  color: #ef4444;
+}
+
+.congrats-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(7, 10, 18, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+  padding: 2rem;
+}
+
+.congrats-card {
+  width: min(720px, 100%);
+  background: #141c2b;
+  border-radius: 18px;
+  padding: 2.5rem;
+  border: 1px solid #1f2a40;
+  box-shadow: 0 18px 40px rgba(6, 10, 20, 0.6);
+  text-align: center;
+}
+
+.congrats-card h2 {
+  margin-bottom: 0.75rem;
+  font-size: 2.2rem;
 }
 
 
@@ -353,6 +413,25 @@ textarea::placeholder {
   padding: 1.6rem;
   border: 1px solid #1f2a40;
   box-shadow: 0 18px 40px rgba(6, 10, 20, 0.6);
+}
+
+.pop-in {
+  animation: pop-in 0.35s ease-out;
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.typing {
+  min-height: 2.4rem;
 }
 
 .screen {
