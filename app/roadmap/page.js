@@ -32,6 +32,7 @@ export default function Roadmap() {
   const [aiError, setAiError] = useState("");
   const [aiClearedNotice, setAiClearedNotice] = useState(false);
   const [aiBlocked, setAiBlocked] = useState(false);
+  const [remainingMs, setRemainingMs] = useState(null);
 
   useEffect(() => {
     const raw = sessionStorage.getItem("cramifyRoadmap");
@@ -44,18 +45,85 @@ export default function Roadmap() {
     }
   }, []);
 
-  const data = useMemo(() => {
-    const course = searchParams.get("course") || stored?.course || "Your course";
-    const level = searchParams.get("level") || stored?.level || "0";
-    const hoursUntil =
-      searchParams.get("hoursUntil") || stored?.hoursUntil || "—";
-    const hoursAvailable =
-      searchParams.get("hoursAvailable") || stored?.hoursAvailable || "—";
-    const topics = parseTopics(
-      searchParams.get("topics") || stored?.topics || ""
+  useEffect(() => {
+    const hasParams = ["course", "level", "hoursUntil", "hoursAvailable", "topics"]
+      .map((key) => searchParams.get(key))
+      .some((value) => value != null);
+    if (!hasParams) return;
+
+    const course = searchParams.get("course") || "Your course";
+    const level = searchParams.get("level") || "0";
+    const hoursUntil = searchParams.get("hoursUntil") || "—";
+    const hoursAvailable = searchParams.get("hoursAvailable") || "—";
+    const topics = parseTopics(searchParams.get("topics") || "");
+    const createdAt = stored?.createdAt ?? Date.now();
+    const examAt =
+      stored?.examAt ??
+      (Number(hoursUntil) > 0
+        ? createdAt + Number(hoursUntil) * 60 * 60 * 1000
+        : null);
+
+    const nextStored = {
+      course,
+      level,
+      hoursUntil,
+      hoursAvailable,
+      topics,
+      createdAt,
+      examAt
+    };
+
+    if (JSON.stringify(nextStored) === JSON.stringify(stored)) {
+      return;
+    }
+
+    setStored(nextStored);
+    sessionStorage.setItem("cramifyRoadmap", JSON.stringify(nextStored));
+    sessionStorage.setItem(
+      "cramifyAiPlan",
+      JSON.stringify({
+        course,
+        level,
+        hoursUntil,
+        hoursAvailable,
+        topics,
+        allocations: {}
+      })
     );
+  }, [searchParams, stored]);
+
+  const data = useMemo(() => {
+    const course = stored?.course || searchParams.get("course") || "Your course";
+    const level = stored?.level || searchParams.get("level") || "0";
+    const hoursUntil = stored?.hoursUntil || searchParams.get("hoursUntil") || "—";
+    const hoursAvailable =
+      stored?.hoursAvailable || searchParams.get("hoursAvailable") || "—";
+    const topics = parseTopics(stored?.topics || searchParams.get("topics") || "");
     return { course, level, hoursUntil, hoursAvailable, topics };
   }, [searchParams, stored]);
+
+  useEffect(() => {
+    if (!stored?.examAt && !data.hoursUntil) return;
+    const examAt =
+      stored?.examAt != null
+        ? Number(stored.examAt)
+        : Number(data.hoursUntil) > 0
+          ? Date.now() + Number(data.hoursUntil) * 60 * 60 * 1000
+          : null;
+    if (!examAt) return;
+    const tick = () => {
+      const next = Math.max(examAt - Date.now(), 0);
+      setRemainingMs(next);
+    };
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [stored, data.hoursUntil]);
+
+  const hoursUntilDisplay =
+    remainingMs != null
+      ? `${Math.max(remainingMs / 3600000, 0).toFixed(1)}`
+      : data.hoursUntil;
 
   useEffect(() => {
     setTopicMeta((prev) =>
@@ -74,6 +142,10 @@ export default function Roadmap() {
   }, [data.topics]);
 
   const hoursAvailableNumber = Number(data.hoursAvailable || 0);
+  const hoursUntilNumber =
+    remainingMs != null
+      ? Math.max(remainingMs / 3600000, 0)
+      : Number(data.hoursUntil || 0);
   const allocations = useMemo(() => {
     const scores = topicMeta.map(
       (topic) => topic.complexity * topic.importance * topic.weighting
@@ -150,7 +222,7 @@ export default function Roadmap() {
         body: JSON.stringify({
           course: data.course,
           level: data.level,
-          hoursUntil: data.hoursUntil,
+          hoursUntil: hoursUntilNumber.toFixed(1),
           hoursAvailable: hoursAvailableNumber,
           topics: topicMeta.map((topic) => ({
             name: topic.name
@@ -230,7 +302,9 @@ export default function Roadmap() {
           </div>
           <div className="info-card">
             <span className="info-label">Hours until exam</span>
-            <strong>{data.hoursUntil}</strong>
+            <strong>
+              {hoursUntilDisplay !== "—" ? `${hoursUntilDisplay}h` : "—"}
+            </strong>
           </div>
           <div className="info-card">
             <span className="info-label">Hours available</span>

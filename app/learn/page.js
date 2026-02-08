@@ -81,6 +81,18 @@ export default function Learn() {
   }, []);
 
   useEffect(() => {
+    if (!plan) return;
+    const topics =
+      Array.isArray(plan.topics) && plan.topics.length > 0
+        ? plan.topics
+        : [];
+    if (topics.length === 0) {
+      setPlan(null);
+      return;
+    }
+  }, [plan]);
+
+  useEffect(() => {
     if (!plan?.topics?.length) return;
     setProgressBySlug(buildProgress(plan.topics));
   }, [plan]);

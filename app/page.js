@@ -217,12 +217,17 @@ export default function Home() {
                 className="primary"
                 onClick={() =>
                   {
+                    const createdAt = Date.now();
+                    const examAt =
+                      createdAt + Math.max(hoursUntilNumber, 0) * 60 * 60 * 1000;
                     const payload = {
                       course: courseName,
                       level: knowledgeLevel,
                       hoursUntil: hoursUntilExam,
                       hoursAvailable,
-                      topics
+                      topics,
+                      createdAt,
+                      examAt
                     };
                     sessionStorage.setItem(
                       "cramifyRoadmap",
