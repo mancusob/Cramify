@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 export default function Home() {
-  const [step, setStep] = useState(0);
+  const [step, setStep] = useState(-1);
   const [courseName, setCourseName] = useState("");
   const [knowledgeLevel, setKnowledgeLevel] = useState("0");
   const [hoursUntilExam, setHoursUntilExam] = useState("");
@@ -12,6 +12,11 @@ export default function Home() {
   const [topics, setTopics] = useState([]);
   const [topicInput, setTopicInput] = useState("");
   const router = useRouter();
+  const welcomeTitle = "Cramify";
+  const welcomeMessage =
+    "A focused study companion for cramming exams under time pressure. Build a roadmap, track progress, and stay on pace to test day.";
+  const [typedTitle, setTypedTitle] = useState("");
+  const [typedMessage, setTypedMessage] = useState("");
 
   const hoursUntilNumber = Number(hoursUntilExam || 0);
   const sleepHours = Math.ceil(hoursUntilNumber / 24) * 8;
@@ -37,17 +42,59 @@ export default function Home() {
     setTopics((prev) => prev.filter((topic) => topic !== topicToRemove));
   };
 
+  useEffect(() => {
+    if (step !== -1) return;
+    let titleIndex = 0;
+    let messageIndex = 0;
+    setTypedTitle("");
+    setTypedMessage("");
+    const interval = setInterval(() => {
+      if (titleIndex < welcomeTitle.length) {
+        titleIndex += 1;
+        setTypedTitle(welcomeTitle.slice(0, titleIndex));
+        return;
+      }
+      messageIndex += 1;
+      setTypedMessage(welcomeMessage.slice(0, messageIndex));
+      if (messageIndex >= welcomeMessage.length) {
+        clearInterval(interval);
+      }
+    }, 30);
+    return () => clearInterval(interval);
+  }, [step, welcomeMessage, welcomeTitle]);
+
   return (
     <main className="container">
-      <header className="header">
-        <div>
-          <h1>Cramify</h1>
-          <p className="subtitle">Build a custom cram plan in minutes.</p>
-        </div>
-        <button type="button" className="ghost">
-          Start demo
-        </button>
-      </header>
+      {step !== -1 && (
+        <header className="header">
+          <div>
+            <h1>Cramify</h1>
+            <p className="subtitle">Build a custom cram plan in minutes.</p>
+          </div>
+          <button type="button" className="ghost">
+            Start demo
+          </button>
+        </header>
+      )}
+
+      {step === -1 && (
+        <section className="panel screen screen-in pop-in" key="step-welcome">
+          <div className="hero">
+            <p className="eyebrow">Welcome</p>
+            <h2 className="hero-title typing">{typedTitle}</h2>
+            <p className="muted typing">{typedMessage}</p>
+          </div>
+          <div className="row">
+            <button
+              type="button"
+              className="primary"
+              onClick={() => setStep(0)}
+            >
+              Get started
+            </button>
+          </div>
+        </section>
+      )}
 
       {step === 0 && (
         <section className="panel screen screen-in" key="step-0">
@@ -80,6 +127,7 @@ export default function Home() {
               type="button"
               className="primary"
               onClick={() => setStep(1)}
+              disabled={!courseName.trim()}
             >
               Next
             </button>

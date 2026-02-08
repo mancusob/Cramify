@@ -398,6 +398,25 @@ textarea::placeholder {
   box-shadow: 0 18px 40px rgba(6, 10, 20, 0.6);
 }
 
+.pop-in {
+  animation: pop-in 0.35s ease-out;
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.typing {
+  min-height: 2.4rem;
+}
+
 .screen {
   animation: screenIn 0.45s ease-out both;
 }
